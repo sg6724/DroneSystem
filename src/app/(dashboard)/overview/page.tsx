@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, BarChart3, Crosshair, Plane } from "lucide-react";
+import { Activity, ArrowUpRight, BarChart3, Crosshair, Plane, ShieldCheck } from "lucide-react";
 import {
   listMissions,
   listDrones,
@@ -8,7 +8,7 @@ import {
   isSupabaseConfigured,
 } from "@/lib/repository";
 import { Stat, Panel, StatusBadge, BatteryBar, ProgressBar } from "@/components/ui";
-import { formatDuration, formatKm, timeAgo, statusColor, statusLabel } from "@/lib/utils";
+import { formatKm, timeAgo, statusColor, statusLabel } from "@/lib/utils";
 import { OverviewMap } from "@/components/overview-map";
 import { Mission, Drone } from "@/lib/types";
 
@@ -16,11 +16,11 @@ export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
   const orgId = await resolveOrgId();
-  const [missions, drones, stats] = await Promise.all([
+  const [missions, drones] = await Promise.all([
     listMissions(orgId),
     listDrones(orgId),
-    orgStats(orgId),
   ]);
+  const stats = await orgStats(orgId, missions);
 
   const active = missions.filter(
     (m) => m.status === "in_progress" || m.status === "starting" || m.status === "paused",
@@ -29,6 +29,17 @@ export default async function OverviewPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <section className="relative overflow-hidden rounded-2xl border border-amber-300/20 bg-[linear-gradient(115deg,#1d2118_0%,#11140e_55%,#0d100c_100%)] px-6 py-7 shadow-2xl shadow-black/20">
+        <div className="absolute -right-10 -top-20 h-56 w-56 rounded-full bg-amber-300/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.2em] text-amber-300"><ShieldCheck className="h-3.5 w-3.5" /> Field command</div>
+            <h2 className="mt-3 text-3xl font-black uppercase tracking-tight text-stone-100">Every flight, in focus.</h2>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-stone-400">A live view of the fleet, mission health, and the evidence being captured across your active survey sites.</p>
+          </div>
+          <Link href="/plan" className="inline-flex items-center gap-2 self-start rounded-full bg-amber-400 px-4 py-2.5 text-xs font-extrabold text-black transition hover:bg-amber-300 lg:self-auto">Plan field mission <ArrowUpRight className="h-4 w-4" /></Link>
+        </div>
+      </section>
       {/* top stat row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat
@@ -65,16 +76,16 @@ export default async function OverviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Panel
           title="Live Operations"
-          right={<span className="flex items-center gap-1.5 text-[11px] text-cyan-300"><span className="dot bg-cyan-400 live-pulse" /> LIVE</span>}
+          right={<span className="flex items-center gap-1.5 text-[11px] text-amber-200"><span className="dot bg-amber-300 live-pulse" /> LIVE</span>}
           className="lg:col-span-2"
           pad={false}
         >
           <div className="h-[420px]">
-            <OverviewMap missions={missions as any} drones={drones as any} activeOnly={false} />
+            <OverviewMap missions={missions} drones={drones} />
           </div>
         </Panel>
 
-        <Panel title="Aircraft Deployed" right={<Link href="/fleet" className="text-[11px] text-cyan-400 hover:text-cyan-300">Manage</Link>}>
+        <Panel title="Aircraft Deployed" right={<Link href="/fleet" className="text-[11px] text-amber-300 hover:text-amber-200">Manage</Link>}>
           <div className="space-y-3">
             {drones.slice(0, 5).map((d) => (
               <div key={d.id} className="flex items-center gap-3">
@@ -100,7 +111,7 @@ export default async function OverviewPage() {
       {/* mission table */}
       <Panel
         title="Recent Missions"
-        right={<Link href="/monitor" className="text-[11px] text-cyan-400 hover:text-cyan-300">Open Monitor</Link>}
+      right={<Link href="/monitor" className="text-[11px] text-amber-300 hover:text-amber-200">Open Monitor</Link>}
       >
         <MissionTable missions={recent} drones={drones} />
       </Panel>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Pencil, Eraser, Grid3x3, Grid2x2Plus, Route as RouteIcon,
@@ -114,15 +114,14 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to plan mission");
       router.push(`/monitor?mission=${data.mission.id}`);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to plan mission");
     } finally {
       setSubmitting(false);
     }
   };
 
   const availableDrones = drones.filter((d) => d.status === "available");
-  const unusedRef = useRef(null);
 
   return (
     <div className="p-6 space-y-6">

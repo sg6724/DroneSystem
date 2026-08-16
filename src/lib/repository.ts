@@ -10,17 +10,51 @@ import { ORG_ID_DEMO, demoStore } from "./demo/demo-store";
 const isSupabaseConfigured = () =>
   Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
+const orgIdCache = new Map<string, { orgId: string; expiresAt: number }>();
+const ORG_ID_CACHE_TTL_MS = 60_000;
+
 function delay<T>(v: T, ms = 120): Promise<T> {
   return new Promise((r) => setTimeout(() => r(v), ms));
 }
 
 export type { Drone, Mission, MissionEvent, OrgStats };
 
+type MissionRow = {
+  id: string;
+  org_id: string;
+  name: string;
+  site_name: string | null;
+  drone_id: string | null;
+  status: Mission["status"];
+  pattern: Mission["pattern"];
+  area_geojson: Mission["area_geojson"];
+  waypoints: Mission["waypoints"];
+  altitude_m: number;
+  speed_mps: number;
+  overlap_percent: number;
+  sensor_cadence_s: number;
+  planned_distance_km: number | null;
+  planned_duration_s: number | null;
+  area_ha: number | null;
+  estimated_images: number | null;
+  start_at: string | null;
+  end_at: string | null;
+  paused_at: string | null;
+  total_pause_s: number;
+  aborted_waypoint_ix: number | null;
+  telemetry_snapshot: Record<string, unknown> | null;
+  actual_distance_km: number | null;
+  actual_duration_s: number | null;
+  coverage_pct: number | null;
+  images_captured: number | null;
+  created_at: string;
+};
+
 // ---------------------------------------------------------------------------
 // Drones
 // ---------------------------------------------------------------------------
 
-export async function listDrones(orgId: string): Promise<Drone[]> {
+export async function listDrones(_orgId: string): Promise<Drone[]> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
@@ -32,7 +66,7 @@ export async function listDrones(orgId: string): Promise<Drone[]> {
   return await delay([...store.drones.values()]);
 }
 
-export async function getDrone(id: string, orgId: string): Promise<Drone | null> {
+export async function getDrone(id: string, _orgId: string): Promise<Drone | null> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
@@ -42,7 +76,7 @@ export async function getDrone(id: string, orgId: string): Promise<Drone | null>
   return (await delay(demoStore().drones.get(id) ?? null)) as Drone | null;
 }
 
-export async function updateDrone(id: string, patch: Partial<Drone>, orgId: string): Promise<Drone | null> {
+export async function updateDrone(id: string, patch: Partial<Drone>, _orgId: string): Promise<Drone | null> {
   if (isSupabaseConfigured()) {
     const { getSupabaseAdminClient } = await import("./supabase/server");
     const sb = await getSupabaseAdminClient();
@@ -72,7 +106,7 @@ export async function resetDronePosition(id: string, orgId: string): Promise<Dro
 // Missions
 // ---------------------------------------------------------------------------
 
-const missionFromRow = (row: any): Mission => ({
+const missionFromRow = (row: MissionRow): Mission => ({
   id: row.id,
   org_id: row.org_id,
   name: row.name,
@@ -103,19 +137,19 @@ const missionFromRow = (row: any): Mission => ({
   created_at: row.created_at ?? new Date().toISOString(),
 });
 
-export async function listMissions(orgId: string): Promise<Mission[]> {
+export async function listMissions(_orgId: string): Promise<Mission[]> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
     const { data, error } = await sb.from("missions").select("*").order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return (data as any[] ?? []).map(missionFromRow);
+    return ((data ?? []) as MissionRow[]).map(missionFromRow);
   }
   const store = demoStore();
   return await delay([...store.missions.values()].sort((a, b) => (b.created_at > a.created_at ? 1 : -1)));
 }
 
-export async function getMission(id: string, orgId: string): Promise<Mission | null> {
+export async function getMission(id: string, _orgId: string): Promise<Mission | null> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
@@ -217,7 +251,7 @@ export async function createMission(input: {
 export async function saveMission(
   id: string,
   patch: Partial<Mission>,
-  orgId: string,
+  _orgId: string,
 ): Promise<Mission | null> {
   if (isSupabaseConfigured()) {
     const { getSupabaseAdminClient } = await import("./supabase/server");
@@ -235,7 +269,7 @@ export async function saveMission(
   return updated;
 }
 
-export async function deleteMission(id: string, orgId: string): Promise<void> {
+export async function deleteMission(id: string, _orgId: string): Promise<void> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
@@ -252,7 +286,7 @@ export async function deleteMission(id: string, orgId: string): Promise<void> {
 // Events
 // ---------------------------------------------------------------------------
 
-export async function listEvents(missionId: string, orgId: string): Promise<MissionEvent[]> {
+export async function listEvents(missionId: string, _orgId: string): Promise<MissionEvent[]> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
@@ -305,8 +339,8 @@ export async function appendEvent(
 // Analytics
 // ---------------------------------------------------------------------------
 
-export async function orgStats(orgId: string): Promise<OrgStats> {
-  const missions = await listMissions(orgId);
+export async function orgStats(orgId: string, loadedMissions?: Mission[]): Promise<OrgStats> {
+  const missions = loadedMissions ?? await listMissions(orgId);
   const completed = missions.filter((m) => m.status === "completed");
   const aborted = missions.filter((m) => m.status === "aborted");
   const active = missions.filter((m) => m.status === "in_progress" || m.status === "starting" || m.status === "paused");
@@ -318,7 +352,7 @@ export async function orgStats(orgId: string): Promise<OrgStats> {
     ? completed.reduce((s, m) => s + (m.coverage_pct ?? 0), 0) / completed.length
     : 0;
 
-  await delay(60);
+  if (!loadedMissions) await delay(60);
   return {
     totalMissions: missions.length,
     completedMissions: completed.length,
@@ -335,10 +369,17 @@ export async function resolveOrgId(): Promise<string> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) return ORG_ID_DEMO;
-    const { data } = await sb.from("profiles").select("org_id").eq("id", user.id).single();
-    return (data?.org_id as string) ?? ORG_ID_DEMO;
+    const { data: verifiedClaims } = await sb.auth.getClaims();
+    const userId = typeof verifiedClaims?.claims.sub === "string" ? verifiedClaims.claims.sub : null;
+    if (!userId) return ORG_ID_DEMO;
+
+    const cached = orgIdCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) return cached.orgId;
+
+    const { data } = await sb.from("profiles").select("org_id").eq("id", userId).single();
+    const orgId = (data?.org_id as string) ?? ORG_ID_DEMO;
+    orgIdCache.set(userId, { orgId, expiresAt: Date.now() + ORG_ID_CACHE_TTL_MS });
+    return orgId;
   }
   return ORG_ID_DEMO;
 }

@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import {
-  Play, Pause, OctagonX, RotateCcw, Satellite, Gauge, Timer,
-  BatteryFull, Wind, Waypoints, Zap, Cable, CircleDot,
+  Play, Pause, OctagonX, Satellite, Gauge, Timer,
+  BatteryFull, Wind, Waypoints, Zap, Cable,
 } from "lucide-react";
 import SurveyMap from "@/components/survey-map";
-import { StatusBadge, ProgressBar, BatteryBar } from "@/components/ui";
-import { formatDuration, formatEta, formatKm, timeAgo, statusLabel } from "@/lib/utils";
-import { Mission, Drone } from "@/lib/types";
+import { StatusBadge, ProgressBar } from "@/components/ui";
+import { formatDuration, formatKm, timeAgo, statusLabel } from "@/lib/utils";
+import { Mission, Drone, MissionEvent } from "@/lib/types";
 import type { GeoPoint } from "@/lib/simulation/geometry";
 
 interface LiveState {
@@ -31,12 +32,8 @@ interface LiveState {
   timeline: { activeS: number; wallS: number; paused: boolean };
 }
 
-interface LiveResponse {
-  mission: Mission;
-  state: LiveState | null;
-}
-
 const STATUS_ORDER = ["starting", "in_progress", "paused", "resumed", "waypoint_reached", "completed", "aborted"];
+void STATUS_ORDER;
 
 export default function MonitorClient({
   missions: initialMissions,
@@ -53,7 +50,7 @@ export default function MonitorClient({
     initialId ?? initialMissions.find((m) => m.status === "in_progress" || m.status === "starting")?.id ?? initialMissions[0]?.id ?? null,
   );
   const [telemetry, setTelemetry] = useState<Record<string, LiveState>>({});
-  const [events, setEvents] = useState<Record<string, any[]>>({});
+  const [events, setEvents] = useState<Record<string, MissionEvent[]>>({});
   const [driving, setDriving] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const eventRef = useRef<HTMLDivElement>(null);
@@ -74,6 +71,8 @@ export default function MonitorClient({
   }, []);
 
   // Poll live telemetry for all active/in-progress (and selected) missions every second.
+  const missionKeys = allMissions.map((m) => m.id).join(",");
+
   useEffect(() => {
     let stop = false;
     const poll = async () => {
@@ -92,7 +91,7 @@ export default function MonitorClient({
       );
       if (stop) return;
       const nextT: Record<string, LiveState> = {};
-      const nextE: Record<string, any[]> = {};
+      const nextE: Record<string, MissionEvent[]> = {};
       results.forEach((r, i) => {
         const id = targets[i];
         if (r.status === "fulfilled" && r.value?.state) {
@@ -108,7 +107,7 @@ export default function MonitorClient({
             return next;
           });
         }
-        const em = r.status === "fulfilled" && r.value?.events ? r.value.events : [];
+        const em = (r.status === "fulfilled" && r.value?.events) || [];
         if (em.length) nextE[id] = em;
       });
       setTelemetry((prev) => ({ ...prev, ...nextT }));
@@ -120,7 +119,8 @@ export default function MonitorClient({
       stop = true;
       clearInterval(t);
     };
-  }, [allMissions.map((m) => m.id).join(","), selectedId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missionKeys, selectedId]);
 
   // auto-scroll event feed
   useEffect(() => {
@@ -149,11 +149,11 @@ export default function MonitorClient({
       setAllMissions((prev) => prev.map((m) => (m.id === selected.id ? { ...m, ...liveData.mission } : m)));
       setEvents((prev) => ({ ...prev, [selected.id]: liveData.events ?? prev[selected.id] }));
     }
-  }, [selected?.id]);
+  }, [selected]);
 
   const selectedEvents = selected ? events[selected.id] ?? [] : [];
 
-  const positionNow: GeoPoint | undefined = live
+  const positionNow: { lat: number; lng: number; heading?: number } | undefined = live
     ? { lat: live.position.lat, lng: live.position.lng, heading: live.headingDeg }
     : selected && selected.waypoints[0]
     ? { lat: selected.waypoints[0].lat, lng: selected.waypoints[0].lng }
@@ -378,7 +378,7 @@ export default function MonitorClient({
   );
 }
 
-function MetricRow({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+function MetricRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex items-center justify-between text-[13px]">
       <span className="flex items-center gap-2 text-slate-400">
@@ -414,7 +414,7 @@ function TimelineRow({ at, label, kind, live }: { at: string; label: string; kin
   );
 }
 
-function eventLabel(ev: any): string {
+function eventLabel(ev: MissionEvent): string {
   const map: Record<string, string> = {
     starting: "Drone launching to survey altitude",
     in_progress: "Mission in progress — streaming telemetry",
@@ -428,6 +428,17 @@ function eventLabel(ev: any): string {
 }
 
 function areaPointsFrom(m: Mission): GeoPoint[] | undefined {
+  if (!m.area_geojson) return undefined;
+  try {
+    return m.area_geojson.geometry.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
+  } catch {
+    return undefined;
+  }
+}
+
+function droneBattery(mission: Mission, drones: Drone[]): number {
+  return drones.find((d) => d.id === mission.drone_id)?.battery ?? 100;
+}
 
 /** Approximate flown portion of the path given the flown distance. */
 function interpolateFlown(waypoints: GeoPoint[], flownM: number): GeoPoint[] {

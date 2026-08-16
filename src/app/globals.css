@@ -6,35 +6,35 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  --color-ink-950: #060a0f;
-  --color-ink-900: #0a1118;
-  --color-ink-850: #0d1520;
-  --color-ink-800: #111b29;
-  --color-ink-700: #1a2838;
-  --color-ink-600: #24374c;
-  --color-ink-500: #33506e;
+  --color-ink-950: #070906;
+  --color-ink-900: #0d100c;
+  --color-ink-850: #141711;
+  --color-ink-800: #1a1e16;
+  --color-ink-700: #2a2d22;
+  --color-ink-600: #414332;
+  --color-ink-500: #686955;
 
-  --color-primary: #22d3ee; /* signal cyan */
-  --color-primary-dim: #0e7490;
-  --color-accent: #818cf8; /* indigo */
+  --color-primary: #fbbf24;
+  --color-primary-dim: #a16207;
+  --color-accent: #eab308;
   --color-vivid: #34d399; /* emerald — healthy */
   --color-warn: #fbbf24; /* amber */
   --color-danger: #f87171; /* red */
 
-  --color-gridline: #1c2a3a;
-  --color-surface: #0d1621;
-  --color-surface-2: #111c2b;
-  --color-border-subtle: rgba(88, 130, 178, 0.14);
+  --color-gridline: #292c21;
+  --color-surface: #12150f;
+  --color-surface-2: #1a1e16;
+  --color-border-subtle: rgba(227, 196, 100, 0.15);
 }
 
 :root {
-  --background: #060a0f;
-  --foreground: #e6f1ff;
+  --background: #070906;
+  --foreground: #f8f6ec;
 }
 
 .dark {
-  --background: #060a0f;
-  --foreground: #e6f1ff;
+  --background: #070906;
+  --foreground: #f8f6ec;
 }
 
 * {
@@ -78,7 +78,7 @@ body {
 
 /* ---- reusable components ---- */
 .panel {
-  background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
+  background: linear-gradient(180deg, rgba(30, 34, 24, 0.97), rgba(17, 20, 14, 0.98));
   border: 1px solid var(--color-border-subtle);
   border-radius: 14px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -18px rgba(0, 0, 0, 0.8);
@@ -89,7 +89,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #7f9cc2;
+  color: #d8bd70;
 }
 
 .badge {
@@ -169,7 +169,7 @@ body {
   background: #0a121c;
 }
 .maplibregl-canvas {
-  filter: saturate(0.85) brightness(0.9) contrast(1.05);
+  filter: saturate(0.9) contrast(1.03);
 }
 .maplibregl-ctrl-group {
   background: var(--color-ink-800) !important;

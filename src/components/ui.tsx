@@ -1,11 +1,11 @@
-import { cn, statusColor, statusLabel } from "@/lib/utils";
+import { cn, statusLabel } from "@/lib/utils";
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const map: Record<string, { dot: string; ring: string }> = {
     available: { dot: "bg-emerald-400", ring: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25" },
-    in_mission: { dot: "bg-cyan-400", ring: "bg-cyan-400/10 text-cyan-300 border-cyan-400/25" },
-    starting: { dot: "bg-cyan-400 live-pulse", ring: "bg-cyan-400/10 text-cyan-300 border-cyan-400/25" },
-    in_progress: { dot: "bg-cyan-400 live-pulse", ring: "bg-cyan-400/10 text-cyan-300 border-cyan-400/25" },
+    in_mission: { dot: "bg-amber-300", ring: "bg-amber-300/10 text-amber-200 border-amber-300/25" },
+    starting: { dot: "bg-amber-300 live-pulse", ring: "bg-amber-300/10 text-amber-200 border-amber-300/25" },
+    in_progress: { dot: "bg-amber-300 live-pulse", ring: "bg-amber-300/10 text-amber-200 border-amber-300/25" },
     charging: { dot: "bg-amber-400", ring: "bg-amber-400/10 text-amber-300 border-amber-400/25" },
     paused: { dot: "bg-amber-400", ring: "bg-amber-400/10 text-amber-300 border-amber-400/25" },
     planned: { dot: "bg-slate-400", ring: "bg-slate-400/10 text-slate-300 border-slate-400/25" },
@@ -53,7 +53,7 @@ export function ProgressBar({
   className?: string;
 }) {
   const tones: Record<string, string> = {
-    cyan: "bg-gradient-to-r from-cyan-500 to-cyan-300",
+    cyan: "bg-gradient-to-r from-amber-500 to-amber-300",
     emerald: "bg-gradient-to-r from-emerald-500 to-emerald-300",
     amber: "bg-gradient-to-r from-amber-500 to-amber-300",
     red: "bg-gradient-to-r from-red-500 to-red-300",
@@ -82,7 +82,7 @@ export function Stat({
   tone?: "cyan" | "emerald" | "amber" | "red" | "indigo";
 }) {
   const tones: Record<string, string> = {
-    cyan: "text-cyan-300",
+    cyan: "text-amber-200",
     emerald: "text-emerald-300",
     amber: "text-amber-300",
     red: "text-red-300",

@@ -13,10 +13,11 @@ export async function GET(
   try {
     const { mission, state } = await liveState(id, orgId);
     return NextResponse.json({ mission, state });
-  } catch (e: any) {
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "live_state_error";
     return NextResponse.json(
-      { error: e.message === "mission_not_found" ? "Mission not found" : e.message },
-      { status: e.message === "mission_not_found" ? 404 : 500 },
+      { error: message === "mission_not_found" ? "Mission not found" : message },
+      { status: message === "mission_not_found" ? 404 : 500 },
     );
   }
 }

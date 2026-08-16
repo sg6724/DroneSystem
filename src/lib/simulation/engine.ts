@@ -108,7 +108,7 @@ export function simulateMission(input: SimInput): DroneState {
 
   // ---- flying time computation (pause-aware) -------------------------------
   const wallS = (now - startMs) / 1000;
-  let paused = Boolean(timeline.pausedAt) && status === "paused";
+  const paused = Boolean(timeline.pausedAt) && status === "paused";
   let activeS = wallS - timeline.totalPauseS;
 
   let snap = 0; // time-frozen offset when paused
@@ -117,12 +117,10 @@ export function simulateMission(input: SimInput): DroneState {
     snap = (pausedAtMs - startMs) / 1000 - timeline.totalPauseS;
     activeS = snap;
   }
-  const wallPauseBefore = timeline.totalPauseS;
 
   // ---- starting phase: brief pre-flight ------------------------------------
   // Once launched, the first `starting` seconds ramp the drone up to speed.
-  const launch = Math.min(activeS, PLANNED_ETA_INTO_FUTURE_S);
-  let effActive = Math.max(0, activeS - PLANNED_ETA_INTO_FUTURE_S);
+  const effActive = Math.max(0, activeS - PLANNED_ETA_INTO_FUTURE_S);
 
   // ---- clamp flyable time --------------------------------------------------
   if (effActive >= totalDurationS) {
@@ -143,7 +141,7 @@ export function simulateMission(input: SimInput): DroneState {
   // ---- interpolate position + leg math --------------------------------------
   const flownM = Math.max(0, effActive) * plan.speedMps;
   const pos = pointAtDistance(wps, flownM);
-  const { cum, total: totalCum } = cumulativeDistances(wps);
+  const { cum } = cumulativeDistances(wps);
 
   let waypointIx = 0;
   for (let i = 1; i < wps.length; i++) if (flownM >= cum[i - 1]) waypointIx = i - 1;
@@ -287,7 +285,7 @@ export function actionPause(status: MissionStatus, timeline: ControlTimeline): {
   return { status, pausedAt: timeline.pausedAt, endAt: timeline.endAt };
 }
 
-export function actionResume(status: MissionStatus, timeline: ControlTimeline, plan: MissionPlan): { status: MissionStatus; pausedAt: string | null; totalPauseS: number } {
+export function actionResume(status: MissionStatus, timeline: ControlTimeline): { status: MissionStatus; pausedAt: string | null; totalPauseS: number } {
   if (status === "paused" && timeline.pausedAt) {
     const pauseMs = Date.now() - new Date(timeline.pausedAt).getTime();
     const total = Math.max(0, timeline.totalPauseS + pauseMs / 1000);
@@ -304,7 +302,7 @@ export function actionAbort(status: MissionStatus, timeline: ControlTimeline, st
   };
 }
 
-export function actionStart(timeline: ControlTimeline): { status: MissionStatus; startAt: string; endAt: string | null } {
+export function actionStart(): { status: MissionStatus; startAt: string; endAt: string | null } {
   return {
     status: "starting",
     startAt: new Date().toISOString(),

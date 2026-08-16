@@ -28,7 +28,7 @@ export default async function FleetPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <Panel title="Fleet Position" className="lg:col-span-2" pad={false}>
           <div className="h-[420px]">
-            <FleetMap drones={drones as any} />
+            <FleetMap drones={drones} />
           </div>
         </Panel>
 

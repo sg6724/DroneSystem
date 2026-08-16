@@ -5,9 +5,7 @@
 // ============================================================================
 
 import "server-only";
-import {
-  Mission, Drone,
-} from "./types";
+import { Drone } from "./types";
 import {
   simulateMission, actionStart, actionPause, actionResume, actionAbort,
   MissionPlan, ControlTimeline, DroneState,
@@ -51,6 +49,18 @@ export async function liveState(missionId: string, orgId: string, batteryStart =
     batteryStart,
   });
 
+  // Telemetry is polled continuously, so it is the reliable place to persist
+  // a naturally completed mission. Without this transition, a flight stays
+  // "starting" or "in_progress" forever after reaching its last waypoint.
+  if (
+    state &&
+    state.progressPct >= 100 &&
+    (mission.status === "starting" || mission.status === "in_progress")
+  ) {
+    const completed = await finalizeIfComplete(missionId, orgId, batteryStart);
+    return { mission: completed ?? mission, state };
+  }
+
   return { mission, state };
 }
 
@@ -60,8 +70,7 @@ export async function startMission(missionId: string, orgId: string): Promise<Re
   if (!mission) throw new Error("mission_not_found");
   if (!["planned"].includes(mission.status)) throw new Error("invalid_state");
 
-  const timeline = toTimeline(mission);
-  const next = actionStart(timeline);
+  const next = actionStart();
 
   const updated = await saveMission(
     missionId,
@@ -85,7 +94,11 @@ export async function pauseMission(missionId: string, orgId: string): Promise<Re
 
   const timeline = toTimeline(mission);
   const next = actionPause(mission.status, timeline);
-  const updated = await saveMission(missionId, next as Partial<RepoMission>, orgId);
+  const updated = await saveMission(
+    missionId,
+    { status: next.status, paused_at: next.pausedAt, end_at: next.endAt },
+    orgId,
+  );
   if (next.status === "paused") await appendEvent(missionId, orgId, "paused", "Operator paused mission");
   return updated!;
 }
@@ -96,8 +109,12 @@ export async function resumeMission(missionId: string, orgId: string): Promise<R
   if (!mission) throw new Error("mission_not_found");
 
   const timeline = toTimeline(mission);
-  const next = actionResume(mission.status, timeline, toPlan(mission));
-  const updated = await saveMission(missionId, next as Partial<RepoMission>, orgId);
+  const next = actionResume(mission.status, timeline);
+  const updated = await saveMission(
+    missionId,
+    { status: next.status, paused_at: next.pausedAt, total_pause_s: next.totalPauseS },
+    orgId,
+  );
   if (next.status === "in_progress") await appendEvent(missionId, orgId, "resumed", "Operator resumed mission");
   return updated!;
 }

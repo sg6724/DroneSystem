@@ -1,5 +1,5 @@
 import {
-  BarChart3, Plane, Images, Map, Percent, Clock3, TrendingUp, Route,
+  BarChart3, Plane, Images, Clock3, Route,
 } from "lucide-react";
 import { resolveOrgId, listMissions, orgStats, listDrones } from "@/lib/repository";
 import { Stat, Panel, StatusBadge, ProgressBar } from "@/components/ui";
@@ -11,11 +11,11 @@ export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
   const orgId = await resolveOrgId();
-  const [missions, stats, drones] = await Promise.all([
+  const [missions, drones] = await Promise.all([
     listMissions(orgId),
-    orgStats(orgId),
     listDrones(orgId),
   ]);
+  const stats = await orgStats(orgId, missions);
 
   const patternBreakdown = {
     grid: missions.filter((m) => m.pattern === "grid").length,
@@ -41,7 +41,7 @@ export default async function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Panel title="Survey Throughput" pad={false}>
           <div className="h-[280px] px-2">
-            <MissionCharts missions={missions as any} />
+            <MissionCharts missions={missions} />
           </div>
         </Panel>
 

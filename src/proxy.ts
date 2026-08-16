@@ -1,13 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/auth/callback"];
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/auth/callback"];
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const url = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => url.startsWith(p));
+  const isPublic = PUBLIC_PATHS.some((p) => p === "/" ? url === p : url.startsWith(p));
 
   // In demo mode (no Supabase configured) everything is accessible.
   const configured = Boolean(
@@ -34,20 +34,29 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verify the JWT locally (with cached signing keys) on the hot path. This
+  // avoids an Auth API round-trip for every telemetry poll and page request.
+  const { data: verifiedClaims } = await supabase.auth.getClaims();
+  let userId = typeof verifiedClaims?.claims.sub === "string" ? verifiedClaims.claims.sub : null;
 
-  if (!user && !isPublic) {
+  // An expired token still needs the Auth API once to refresh its session.
+  if (!userId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    userId = user?.id ?? null;
+  }
+
+  if (!userId && !isPublic) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("redirectedFrom", url);
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && isPublic && url !== "/auth/callback") {
+  if (userId && isPublic && url !== "/auth/callback") {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/";
+    redirectUrl.pathname = "/overview";
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -55,5 +64,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/((?!_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

@@ -11,31 +11,33 @@ import Map, {
   Source,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { LngLatBounds, type StyleSpecification } from "maplibre-gl";
+import { LngLatBounds } from "maplibre-gl";
 import { GeoPoint } from "@/lib/simulation/geometry";
+import { cn } from "@/lib/utils";
 
-const DARK_STYLE = {
+// A direct OpenStreetMap raster source keeps the simulation readable with
+// reliable roads and place labels, without an API key or paid map provider.
+const BASEMAP_STYLE = {
   version: 8 as const,
   sources: {
-    "carto-dark": {
+    openstreetmap: {
       type: "raster" as const,
-      tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
-      attribution: "© OpenStreetMap contributors © CARTO",
-      maxzoom: 20,
+      attribution: "© OpenStreetMap contributors",
+      maxzoom: 19,
     },
   },
   layers: [
     {
-      id: "carto-dark",
+      id: "openstreetmap",
       type: "raster" as const,
-      source: "carto-dark",
+      source: "openstreetmap",
       minzoom: 0,
-      maxzoom: 20,
-      paint: { "raster-saturation": -0.25, "raster-brightness-low": 0.85, "raster-brightness-high": 1.1 },
+      maxzoom: 19,
     },
   ],
-} as StyleSpecification;
+};
 
 export interface FlightPath {
   lat: number;
@@ -47,7 +49,7 @@ export interface MapViewProps {
   areaPolygon?: GeoPoint[];
   flightPath?: FlightPath[];
   flownPath?: FlightPath[];
-  currentPosition?: GeoPoint & { heading?: number };
+  currentPosition?: { lat: number; lng: number; heading?: number };
   droneMarker?: { label?: string; color?: string };
   home?: GeoPoint & { label?: string };
   onDrawPolygon?: (polygon: GeoPoint[]) => void;
@@ -89,15 +91,38 @@ export default function SurveyMap({
       const span = Math.max(maxLat - minLat, Math.abs(maxLng - minLng));
       return { lat, lng, zoom: span < 0.01 ? 16 : Math.max(11, 15 - Math.log2(span * 400)) };
     }
+    if (currentPosition) return { lat: currentPosition.lat, lng: currentPosition.lng, zoom: 14 };
+    const validFleetMarkers = (fleetMarkers ?? []).filter(
+      (marker) => Number.isFinite(marker.lat) && Number.isFinite(marker.lng),
+    );
+    if (validFleetMarkers.length) {
+      const lats = validFleetMarkers.map((marker) => marker.lat);
+      const lngs = validFleetMarkers.map((marker) => marker.lng);
+      const span = Math.max(
+        Math.max(...lats) - Math.min(...lats),
+        Math.max(...lngs) - Math.min(...lngs),
+      );
+      return {
+        lat: (Math.max(...lats) + Math.min(...lats)) / 2,
+        lng: (Math.max(...lngs) + Math.min(...lngs)) / 2,
+        zoom: span < 0.01 ? 15 : Math.max(3, Math.min(12, 8 - Math.log2(span))),
+      };
+    }
     return { lat: 37.7749, lng: -122.4194, zoom: 11 };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitOnDataKey]);
+  }, [areaPolygon, currentPosition, fleetMarkers]);
 
   const fitBounds = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
-    const pts: (GeoPoint | undefined)[] = [...(areaPolygon ?? []), ...(flightPath ?? []), ...(flownPath ?? [])];
-    const real = pts.filter((p): p is GeoPoint => Boolean(p && Number.isFinite(p.lat)));
+    const pts: (GeoPoint | undefined)[] = [
+      ...(areaPolygon ?? []),
+      ...(flightPath ?? []),
+      ...(flownPath ?? []),
+      ...(fleetMarkers ?? []),
+    ];
+    const real = pts.filter(
+      (p): p is GeoPoint => Boolean(p && Number.isFinite(p.lat) && Number.isFinite(p.lng)),
+    );
     if (real.length >= 2) {
       const bounds = new LngLatBounds();
       real.forEach((p) => bounds.extend([p.lng, p.lat]));
@@ -107,7 +132,7 @@ export default function SurveyMap({
     } else if (currentPosition) {
       map.easeTo({ center: [currentPosition.lng, currentPosition.lat], zoom: 15, duration: 700 });
     }
-  }, [areaPolygon, flightPath, flownPath, currentPosition]);
+  }, [areaPolygon, flightPath, flownPath, currentPosition, fleetMarkers]);
 
   useEffect(() => {
     if (fitOnDataKey) {
@@ -146,21 +171,24 @@ export default function SurveyMap({
   );
 
   return (
-    <Map
-      ref={mapRef}
-      mapStyle={DARK_STYLE}
-      attributionControl={{ compact: true }}
-      reuseMaps
-      initialViewState={initialView}
-      interactive={interactive}
-      onClick={onMapClick}
-      onDblClick={handleDblClick}
-      doubleClickZoom={!drawing}
-      style={{ width: "100%", height: "100%" }}
-      className={className}
-      cursor={drawing ? "crosshair" : "grab"}
-      mapLib={import("maplibre-gl") as any}
-    >
+    <div className={cn("relative w-full h-full overflow-hidden", className)}>
+      <Map
+        ref={mapRef}
+        mapStyle={BASEMAP_STYLE}
+        attributionControl={{ compact: true }}
+        reuseMaps
+        initialViewState={initialView}
+        interactive={interactive}
+        onClick={onMapClick}
+        onDblClick={handleDblClick}
+        doubleClickZoom={!drawing}
+        style={{ width: "100%", height: "100%" }}
+        cursor={drawing ? "crosshair" : "grab"}
+        // mapLib types are modeled on mapbox-gl; maplibre's namespace needs a cast
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mapLib={import("maplibre-gl") as any}
+        onLoad={fitBounds}
+      >
       <NavigationControl position="bottom-right" showCompass />
       <ScaleControl position="bottom-left" />
       {interactive && <GeolocateControl position="bottom-right" />}
@@ -212,16 +240,6 @@ export default function SurveyMap({
               "line-opacity": 0.9,
             }}
           />
-          {vertices.length > 0 && onDrawPolygon && (
-            <>
-              <Layer
-                id="draw-verts"
-                type="circle"
-                paint={{ "circle-color": "#22d3ee", "circle-radius": 5, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1 }}
-              />
-              {/* pass-through: we manage vertices via markers below */}
-            </>
-          )}
         </Source>
       )}
 
@@ -285,7 +303,8 @@ export default function SurveyMap({
             <div className="w-3.5 h-3.5 rounded-full bg-cyan-300 border-2 border-white/80 opacity-80" />
           </Marker>
         ))}
-    </Map>
+      </Map>
+    </div>
   );
 }
 

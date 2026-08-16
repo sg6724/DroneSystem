@@ -21,8 +21,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Enter a valid email address.");
+      return;
+    }
     if (!configured) {
-      router.replace("/");
+      router.replace("/overview");
       return;
     }
     setLoading(true);
@@ -30,24 +35,24 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       const sb = getSupabaseBrowserClient();
       if (mode === "signup") {
         const { data, error } = await sb.auth.signUp({
-          email,
+          email: normalizedEmail,
           password,
-          options: { data: { full_name: email.split("@")[0], org_name: orgName || email.split("@")[0] + "'s Fleet" } },
+          options: { data: { full_name: normalizedEmail.split("@")[0], org_name: orgName.trim() || normalizedEmail.split("@")[0] + "'s Fleet" } },
         });
         if (error) throw error;
         if (data.user?.identities?.length === 0) {
           setError("An account with this email already exists. Try signing in.");
           return;
         }
-        router.replace("/");
+        router.replace("/overview");
         router.refresh();
       } else {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
+        const { error } = await sb.auth.signInWithPassword({ email: normalizedEmail, password });
         if (error) throw error;
-        router.replace("/");
+        router.replace("/overview");
         router.refresh();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Authentication failed. Try again.");
     } finally {
       setLoading(false);
@@ -55,13 +60,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   };
 
   useEffect(() => {
-    const { data: sub } = getSupabaseBrowserClientSafe()?.auth.onAuthStateChange(
-      (_event: string, session: { user: unknown } | null) => {
-        if (session) router.refresh();
-      },
-    ) ?? {};
+    const { data: { subscription } = {} } =
+      getSupabaseBrowserClientSafe()?.auth.onAuthStateChange(
+        (_event: string, session: { user: unknown } | null) => {
+          if (session) router.refresh();
+        },
+      ) ?? {};
 
-    return () => sub?.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, [router]);
 
   return (

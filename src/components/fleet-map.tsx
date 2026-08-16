@@ -21,7 +21,7 @@ export function FleetMap({ drones }: { drones: Drone[] }) {
         color: STATUS_COLOR[d.status] ?? "#818cf8",
         label: d.name,
       }))}
-      fitOnDataKey="fleet"
+      fitOnDataKey={drones.map((d) => d.id).join(",") || "fleet"}
       className="rounded-b-[14px]"
     />
   );

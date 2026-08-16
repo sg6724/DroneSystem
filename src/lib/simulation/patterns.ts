@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { Waypoint } from "./geometry";
-import { D2R, R2D, EARTH_RADIUS_M, centroid, polygonAreaHa } from "./geometry";
+import { D2R, EARTH_RADIUS_M, centroid, polygonAreaHa } from "./geometry";
 
 export type SurveyPattern = "grid" | "crosshatch" | "perimeter";
 

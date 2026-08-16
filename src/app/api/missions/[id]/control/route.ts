@@ -40,10 +40,11 @@ export async function POST(
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
     return NextResponse.json({ mission });
-  } catch (e: any) {
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "unknown_error";
     return NextResponse.json(
-      { error: e.message },
-      { status: e.message === "mission_not_found" ? 404 : 400 },
+      { error: message },
+      { status: message === "mission_not_found" ? 404 : 400 },
     );
   }
 }

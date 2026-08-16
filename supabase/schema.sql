@@ -161,6 +161,13 @@ begin
   insert into profiles (id, org_id, full_name)
   values (new.id, v_org_id, coalesce(new.raw_user_meta_data->>'full_name', new.email));
 
+  -- seed a small starter fleet around the Bay Area so new orgs can demo immediately
+  insert into drones (org_id, name, model, status, battery, max_range_km, max_speed_mps,
+                      max_altitude_m, home_lat, home_lng, last_lat, last_lng) values
+    (v_org_id, 'SkyHawk-01', 'DJI Matrice 350 RTK', 'available',   98, 12, 14, 120, 37.7749, -122.4194, 37.7749, -122.4194),
+    (v_org_id, 'Condor-07',  'DJI Mavic 3 Enterprise', 'available', 87, 9,  16, 120, 37.7833, -122.4167, 37.7833, -122.4167),
+    (v_org_id, 'Vulture-4',  'DJI Matrice 300 RTK',  'charging',    62, 15, 13, 120, 40.7128, -74.0060,  40.7128, -74.0060);
+
   return new;
 end;
 $$;
@@ -169,6 +176,9 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- The function is trigger-only; don't expose it over PostgREST.
+revoke execute on function public.handle_new_user() from anon, authenticated, public;
 
 -- ============================================================================
 -- SEED — demo org, fleet, and a sample survey site
@@ -186,3 +196,14 @@ insert into drones (org_id, name, model, status, battery, max_range_km, max_spee
   ('00000000-0000-0000-0000-000000000001', 'Vulture-4',   'DJI Matrice 300 RTK',  'available',   93, 15, 13, 120, 40.7128, -74.0060,  40.7128, -74.0060),
   ('00000000-0000-0000-0000-000000000001', 'Kestrel-9',   'DJI Mavic 3 Enterprise','charging',  71, 9,  16, 120, 51.5074, -0.1278,  51.5074, -0.1278)
 on conflict do nothing;
+
+-- ============================================================================
+-- NOTE: a ready-to-login demo account (email/password auth) was provisioned in
+-- the live project for reviewer convenience:
+--   email:    demo@skygrid.dev
+--   password: SkyGridDemo123!
+-- It was inserted directly into auth.users (bcrypt hash) + auth.identities and
+-- is confirmed, so no email confirmation step is needed. Its organization,
+-- profile, and 3-drone starter fleet were created by the on_auth_user_created
+-- trigger above. Manual auth.users inserts require non-NULL token columns
+-- (empty string), otherwise GoTrue returns "Database error querying schema".

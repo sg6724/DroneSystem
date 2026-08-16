@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveOrgId, createMission, listDrones } from "@/lib/repository";
+import { resolveOrgId, createMission } from "@/lib/repository";
 import { buildPath, estimateImages, SurveyPattern } from "@/lib/simulation/patterns";
 import { pathDistance } from "@/lib/simulation/geometry";
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       site_name,
       drone_id: drone_id || null,
       pattern,
-      area_geojson: area_geojson as any,
+      area_geojson: area_geojson,
       waypoints: generated.waypoints,
       altitude_m: alt,
       speed_mps: speed,
@@ -86,15 +86,6 @@ export async function POST(req: NextRequest) {
     },
     orgId,
   );
-
-  // If the assigned drone is merely referenced, mark it unavailable for planning.
-  if (drone_id) {
-    const drones = await listDrones(orgId);
-    const drone = drones.find((d) => d.id === drone_id);
-    if (drone?.status === "in_mission" || drone?.status === "charging") {
-      // allow, but no-op — planning a mission with a busy aircraft is fine
-    }
-  }
 
   return NextResponse.json({ mission, stats: { totalKm: generated.totalKm, passes: generated.passes } }, { status: 201 });
 }

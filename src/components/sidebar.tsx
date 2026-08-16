@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/", label: "Overview", icon: LayoutDashboard, match: (p: string) => p === "/" },
+  { href: "/overview", label: "Overview", icon: LayoutDashboard, match: (p: string) => p.startsWith("/overview") },
   { href: "/fleet", label: "Fleet", icon: Radio, match: (p: string) => p.startsWith("/fleet") },
   { href: "/plan", label: "Mission Planner", icon: Route, match: (p: string) => p.startsWith("/plan") },
   { href: "/monitor", label: "Live Monitor", icon: RadarIcon, match: (p: string) => p.startsWith("/monitor") },
@@ -30,11 +30,11 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex w-60 flex-col shrink-0 border-r border-gridline/60 bg-ink-900/70 backdrop-blur-sm">
+    <aside className="hidden md:flex w-60 flex-col shrink-0 border-r border-gridline/60 bg-[#0d100c] backdrop-blur-sm">
       {/* brand */}
-      <Link href="/" className="flex items-center gap-3 px-5 h-16 border-b border-gridline/60">
-        <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-          <Rocket className="w-5 h-5 text-white" />
+      <Link href="/overview" className="flex items-center gap-3 px-5 h-16 border-b border-gridline/60">
+        <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <Rocket className="w-5 h-5 text-black" />
         </div>
         <div className="leading-tight">
           <div className="font-bold tracking-wide text-[15px]">SKYGRID</div>
@@ -56,13 +56,13 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors",
                 active
-                  ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20"
+                  ? "bg-amber-400/10 text-amber-200 border border-amber-400/20"
                   : "text-slate-400 hover:text-slate-100 hover:bg-white/5 border border-transparent",
               )}
             >
-              <Icon className={cn("w-4 h-4", active ? "text-cyan-300" : "text-slate-500")} />
+              <Icon className={cn("w-4 h-4", active ? "text-amber-300" : "text-slate-500")} />
               {label}
-              {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 live-pulse" />}
+              {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-300 live-pulse" />}
             </Link>
           );
         })}
@@ -76,7 +76,7 @@ export function Sidebar() {
             <span>Systems nominal</span>
           </div>
           <div className="flex items-center gap-2">
-            <ScanSearch className="w-3.5 h-3.5 text-cyan-400" />
+            <ScanSearch className="w-3.5 h-3.5 text-amber-300" />
             <span>Simulation engine v2</span>
           </div>
         </div>
