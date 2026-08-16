@@ -1,0 +1,333 @@
+"use client";
+
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Pencil, Eraser, Grid3x3, Grid2x2Plus, Route as RouteIcon,
+  Loader2, Check, MapPin,
+} from "lucide-react";
+import SurveyMap from "@/components/survey-map";
+import { GeoPoint } from "@/lib/simulation/geometry";
+import { SurveyPattern, buildPath } from "@/lib/simulation/patterns";
+import { formatKm } from "@/lib/utils";
+import { Drone } from "@/lib/types";
+
+const SAMPLE_SITES: { name: string; coords: GeoPoint[] }[] = [
+  {
+    name: "SF · Tech Campus",
+    coords: [
+      { lat: 37.7682, lng: -122.4432 },
+      { lat: 37.7782, lng: -122.4432 },
+      { lat: 37.7782, lng: -122.4262 },
+      { lat: 37.7682, lng: -122.4262 },
+    ],
+  },
+  {
+    name: "NV · Solar Farm B-3",
+    coords: [
+      { lat: 36.9032, lng: -117.0152 },
+      { lat: 36.9212, lng: -117.0152 },
+      { lat: 36.9212, lng: -116.9892 },
+      { lat: 36.9032, lng: -116.9892 },
+    ],
+  },
+  {
+    name: "NY · Harbor Terminal",
+    coords: [
+      { lat: 40.7002, lng: -74.0212 },
+      { lat: 40.7142, lng: -74.0212 },
+      { lat: 40.7142, lng: -74.0012 },
+      { lat: 40.7002, lng: -74.0012 },
+    ],
+  },
+];
+
+export default function PlanClient({ drones }: { drones: Drone[] }) {
+  const router = useRouter();
+  const [area, setArea] = useState<GeoPoint[] | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [pattern, setPattern] = useState<SurveyPattern>("crosshatch");
+  const [altitude, setAltitude] = useState(80);
+  const [speed, setSpeed] = useState(12);
+  const [overlap, setOverlap] = useState(70);
+  const [cadence, setCadence] = useState(1);
+  const [swathFactor, setSwathFactor] = useState(2);
+  const [name, setName] = useState("");
+  const [siteName, setSiteName] = useState("Custom Site");
+  const [droneId, setDroneId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const preview = useMemo(() => {
+    if (!area || area.length < 3) return null;
+    return buildPath(area, pattern, {
+      altitudeM: altitude,
+      speedMps: speed,
+      overlapPercent: overlap,
+      swathFactor,
+    });
+  }, [area, pattern, altitude, speed, overlap, swathFactor]);
+
+  const loadSite = useCallback((site: (typeof SAMPLE_SITES)[number]) => {
+    setName(`Survey ${site.name}`);
+    setSiteName(site.name);
+    setArea(site.coords);
+  }, []);
+
+  const onDraw = useCallback((polygon: GeoPoint[]) => {
+    setArea(polygon);
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setArea(null);
+    setName("");
+  }, []);
+
+  const submit = async () => {
+    setError(null);
+    if (!area || area.length < 3) {
+      setError("Draw a survey area on the map (≥ 3 points).");
+      return;
+    }
+    if (!name.trim()) {
+      setError("Give the mission a name.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/missions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          site_name: siteName,
+          pattern,
+          area,
+          drone_id: droneId || null,
+          altitude_m: altitude,
+          speed_mps: speed,
+          overlap_percent: overlap,
+          sensor_cadence_s: cadence,
+          swath_factor: swathFactor,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to plan mission");
+      router.push(`/monitor?mission=${data.mission.id}`);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const availableDrones = drones.filter((d) => d.status === "available");
+  const unusedRef = useRef(null);
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight">Mission Planner</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Define a survey area — SkyGrid generates an optimized, battery-validated flight path.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={clearAll}
+            className="flex items-center gap-1.5 rounded-lg border border-gridline/60 bg-ink-800 hover:bg-ink-700 px-3 py-2 text-[13px] text-slate-300 transition-colors"
+          >
+            <Eraser className="w-4 h-4" /> Clear
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="flex items-center gap-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-ink-950 font-semibold px-4 py-2 text-[13px] transition-colors disabled:opacity-60"
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {submitting ? "Planning…" : "Plan Mission"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 panel overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gridline/40">
+            <div className="panel-header">Survey Area</div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDrawing(!drawing)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium border transition-colors ${
+                  drawing
+                    ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                    : "border-gridline/60 bg-ink-800 text-slate-300 hover:bg-ink-700"
+                }`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                {drawing ? "Drawing… dbl-click to finish" : "Draw Area"}
+              </button>
+              <div className="hidden md:flex items-center gap-1 text-[11px] text-slate-500">
+                {SAMPLE_SITES.map((s) => (
+                  <button
+                    key={s.name}
+                    onClick={() => loadSite(s)}
+                    className="rounded-full border border-gridline/60 px-2.5 py-1 hover:border-cyan-500/40 hover:text-cyan-300 transition-colors"
+                  >
+                    {s.name.split("·")[1]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="relative flex-1 h-[480px]">
+            <SurveyMap
+              areaPolygon={area ?? undefined}
+              flightPath={preview?.waypoints ?? []}
+              drawing={drawing}
+              onDrawPolygon={onDraw}
+              fitOnDataKey="plan"
+              className="rounded-none"
+            />
+          </div>
+          <div className="px-4 py-2.5 border-t border-gridline/40 flex flex-wrap gap-4 text-[11px] text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <MapPin className="w-3 h-3 text-cyan-400" />
+              {area && area.length >= 3
+                ? `Area locked (${area.length} vertices)`
+                : drawing
+                ? "Click map to add vertices · double-click to close polygon"
+                : "Enable Draw Area, then click vertices on the map"}
+            </span>
+            {preview && (
+              <>
+                <span className="mono">{formatKm(preview.totalKm)} route</span>
+                <span className="mono">{preview.passes} passes</span>
+                <span className="mono">{preview.waypoints.length} waypoints</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="panel p-4 space-y-4">
+            <div className="panel-header">Mission Details</div>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Mission name (e.g. Q3 Solar Inspection)"
+              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 transition"
+            />
+            <input
+              value={siteName}
+              onChange={(e) => setSiteName(e.target.value)}
+              placeholder="Site name"
+              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 transition"
+            />
+            <div>
+              <label className="block text-[12px] text-slate-400 mb-1.5">Assign aircraft</label>
+              <select
+                value={droneId}
+                onChange={(e) => setDroneId(e.target.value)}
+                className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 transition"
+              >
+                <option value="">Auto-assign at launch</option>
+                {drones.map((d) => (
+                  <option key={d.id} value={d.id} disabled={d.status !== "available"}>
+                    {d.name} — {d.model} ({Math.round(d.battery)}%)
+                  </option>
+                ))}
+              </select>
+              {availableDrones.length === 0 && (
+                <p className="mt-1 text-[11px] text-amber-400">
+                  No aircraft available right now — mission will wait for an available unit.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="panel p-4 space-y-2">
+            <div className="panel-header">Survey Pattern</div>
+            {(
+              [
+                { id: "grid", label: "Grid", desc: "Single-direction parallel passes", icon: Grid3x3 },
+                { id: "crosshatch", label: "Crosshatch", desc: "Dual-direction, max coverage", icon: Grid2x2Plus },
+                { id: "perimeter", label: "Perimeter", desc: "Boundary trace for inspection", icon: RouteIcon },
+              ] as const
+            ).map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPattern(p.id)}
+                className={`w-full flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                  pattern === p.id
+                    ? "border-cyan-500/40 bg-cyan-500/10"
+                    : "border-gridline/60 bg-ink-800/50 hover:bg-ink-800"
+                }`}
+              >
+                <p.icon className={`w-4 h-4 mt-0.5 ${pattern === p.id ? "text-cyan-300" : "text-slate-500"}`} />
+                <span>
+                  <span className="block text-[13px] font-medium">{p.label}</span>
+                  <span className="block text-[11px] text-slate-500">{p.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="panel p-4 space-y-4">
+            <div className="panel-header">Flight Parameters</div>
+            <Slider label="Altitude" value={altitude} unit=" m" min={20} max={120} step={5} onChange={setAltitude} />
+            <Slider label="Cruise speed" value={speed} unit=" m/s" min={4} max={25} step={1} onChange={setSpeed} />
+            <Slider label="Overlap" value={overlap} unit="%" min={0} max={95} step={5} onChange={setOverlap} />
+            <Slider label="Sensor cadence" value={cadence} unit=" s" min={1} max={30} step={1} onChange={setCadence} />
+            <Slider label="Swath factor" value={swathFactor} unit="×" min={1} max={6} step={0.5} onChange={setSwathFactor} />
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-300">
+              {error}
+            </div>
+          )}
+
+          {preview && (
+            <div className="panel p-4 grid grid-cols-2 gap-3 text-center">
+              <div>
+                <div className="text-[11px] uppercase tracking-wider text-slate-500">Est. Duration</div>
+                <div className="mono text-lg font-semibold text-cyan-300">
+                  {Math.round((preview.totalKm * 1000) / speed / 60)}m
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wider text-slate-500">Route Length</div>
+                <div className="mono text-lg font-semibold text-cyan-300">{formatKm(preview.totalKm)}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Slider({
+  label, value, unit, min, max, step, onChange,
+}: {
+  label: string; value: number; unit: string; min: number; max: number; step: number; onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="text-[12px] text-slate-400">{label}</label>
+        <span className="mono text-[13px] text-cyan-300 tabular-nums">{value}{unit}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-cyan-400"
+      />
+    </div>
+  );
+}
