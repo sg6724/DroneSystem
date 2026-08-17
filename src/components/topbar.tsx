@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, Plus, LogOut, ShieldCheck, Rocket, Menu, X } from "lucide-react";
+import { Bell, Plus, LogOut, ShieldCheck, Menu, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -61,9 +61,11 @@ export function Topbar() {
       </button>
 
       <div className="flex items-center gap-2.5 min-w-0">
-        <Rocket className="h-7 w-7 sm:h-8 sm:w-8 text-green-500 shrink-0" />
+        <div className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 overflow-hidden rounded-xl shadow-lg shadow-emerald-500/20">
+          <img src="/skygrid-mark.svg" alt="SkyGrid" className="h-full w-full" />
+        </div>
         <div className="leading-tight min-w-0">
-          <h1 className="text-base sm:text-xl font-bold text-white tracking-tight truncate">Drone Tracker</h1>
+          <h1 className="text-base sm:text-xl font-bold text-white tracking-tight truncate">SKYGRID</h1>
           <p className="text-[10px] text-gray-400 uppercase tracking-[0.2em] truncate">{title}</p>
         </div>
       </div>
