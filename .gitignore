@@ -39,3 +39,8 @@ opencode.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+AGENTS.md
+CLAUDE.md
+client_dev*.log
