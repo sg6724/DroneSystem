@@ -15,8 +15,9 @@ import { LngLatBounds } from "maplibre-gl";
 import { GeoPoint } from "@/lib/simulation/geometry";
 import { cn } from "@/lib/utils";
 
-// Kept as a reference for the previous raster configuration.
-/* const BASEMAP_STYLE = {
+// Direct OpenStreetMap raster tiles are the most reliable option for the
+// browser environments used by this dashboard.
+const BASEMAP_STYLE = {
   version: 8 as const,
   sources: {
     openstreetmap: {
@@ -36,10 +37,7 @@ import { cn } from "@/lib/utils";
       maxzoom: 19,
     },
   ],
-}; */
-
-// OSM-derived vector tiles packaged as a complete MapLibre style.
-const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+};
 
 export interface FlightPath {
   lat: number;
