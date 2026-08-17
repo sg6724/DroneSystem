@@ -181,7 +181,7 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
               </div>
             </div>
           </div>
-          <div className="relative flex-1 h-[480px]">
+          <div className="relative h-[300px] shrink-0 sm:h-[420px] lg:h-[480px]">
             <SurveyMap
               areaPolygon={area ?? undefined}
               flightPath={preview?.waypoints ?? []}
