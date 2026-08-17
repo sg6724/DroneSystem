@@ -124,10 +124,6 @@ export default async function OverviewPage() {
       >
         <MissionTable missions={recent} drones={drones} />
       </Panel>
-
-      <p className="text-center text-[11px] text-slate-600">
-        Connected to Supabase · org-scoped data · RLS enforced
-      </p>
     </div>
   );
 }
