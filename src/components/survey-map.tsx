@@ -15,9 +15,8 @@ import { LngLatBounds } from "maplibre-gl";
 import { GeoPoint } from "@/lib/simulation/geometry";
 import { cn } from "@/lib/utils";
 
-// A direct OpenStreetMap raster source keeps the simulation readable with
-// reliable roads and place labels, without an API key or paid map provider.
-const BASEMAP_STYLE = {
+// Kept as a reference for the previous raster configuration.
+/* const BASEMAP_STYLE = {
   version: 8 as const,
   sources: {
     openstreetmap: {
@@ -37,7 +36,10 @@ const BASEMAP_STYLE = {
       maxzoom: 19,
     },
   ],
-};
+}; */
+
+// OSM-derived vector tiles packaged as a complete MapLibre style.
+const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
 export interface FlightPath {
   lat: number;
@@ -77,6 +79,7 @@ export default function SurveyMap({
   fleetMarkers,
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [vertices, setVertices] = useState<GeoPoint[]>([]);
   const verticesRef = useRef<GeoPoint[]>([]);
 
@@ -142,6 +145,23 @@ export default function SurveyMap({
     }
   }, [fitOnDataKey, fitBounds]);
 
+  // A map can mount before a mobile layout or tab has its final dimensions.
+  // Resize it whenever the shared container changes size.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resize = () => mapRef.current?.resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    const frame = requestAnimationFrame(resize);
+
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
   // manual click-to-draw when in drawing mode
   const onMapClick = useCallback(
     (e: { lngLat: { lng: number; lat: number } }) => {
@@ -169,12 +189,11 @@ export default function SurveyMap({
   );
 
   return (
-    <div className={cn("relative w-full h-full overflow-hidden", className)}>
+    <div ref={containerRef} className={cn("relative w-full h-full min-h-0 overflow-hidden", className)}>
       <Map
         ref={mapRef}
         mapStyle={BASEMAP_STYLE}
         attributionControl={{ compact: true }}
-        reuseMaps
         initialViewState={initialView}
         interactive={interactive}
         onClick={onMapClick}
@@ -185,7 +204,10 @@ export default function SurveyMap({
         // mapLib types are modeled on mapbox-gl; maplibre's namespace needs a cast
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mapLib={import("maplibre-gl") as any}
-        onLoad={fitBounds}
+        onLoad={() => {
+          mapRef.current?.resize();
+          fitBounds();
+        }}
       >
       <NavigationControl position="bottom-right" showCompass />
       <ScaleControl position="bottom-left" />
