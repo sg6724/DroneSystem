@@ -6,7 +6,12 @@ import { pathDistance } from "@/lib/simulation/geometry";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const orgId = await resolveOrgId();
+  let orgId: string;
+  try {
+    orgId = await resolveOrgId();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 

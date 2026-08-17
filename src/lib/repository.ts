@@ -1,24 +1,14 @@
 // ============================================================================
-// repository.ts — data gateway. Uses Supabase REST when env keys are present,
-// otherwise falls back to the in-memory demo store. Server-only.
+// repository.ts — data gateway. Production only: always uses Supabase REST
+// with the authenticated user's session (or the service-role admin client for
+// writes that bypass RLS). Server-only.
 // ============================================================================
 
 import "server-only";
 import { Drone, Mission, MissionEvent, MissionSummary, OrgStats } from "./types";
-import { ORG_ID_DEMO, demoStore } from "./demo/demo-store";
-
-const isSupabaseConfigured = () =>
-  Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 const orgIdCache = new Map<string, { orgId: string; expiresAt: number }>();
 const ORG_ID_CACHE_TTL_MS = 60_000;
-
-// Demo-store artificial latency. Configurable so dev/demo stays snappy.
-const DEMO_DELAY_MS = Number(process.env.DEMO_DELAY_MS ?? 0);
-
-function delay<T>(v: T, ms = DEMO_DELAY_MS): Promise<T> {
-  return ms > 0 ? new Promise((r) => setTimeout(() => r(v), ms)) : Promise.resolve(v);
-}
 
 // ---------------------------------------------------------------------------
 // Short-TTL read cache (per server instance). Dashboard reads are memoized for
@@ -106,46 +96,30 @@ export async function listDrones(orgId: string): Promise<Drone[]> {
 }
 
 async function listDronesUncached(orgId: string): Promise<Drone[]> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const { data, error } = await sb.from("drones").select("*").eq("org_id", orgId).order("name");
-    if (error) throw new Error(error.message);
-    return (data as Drone[]) ?? [];
-  }
-  const store = demoStore();
-  return await delay([...store.drones.values()]);
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { data, error } = await sb.from("drones").select("*").eq("org_id", orgId).order("name");
+  if (error) throw new Error(error.message);
+  return (data as Drone[]) ?? [];
 }
 
 export async function getDrone(id: string, _orgId: string): Promise<Drone | null> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const { data } = await sb.from("drones").select("*").eq("id", id).single();
-    return (data as Drone | null) ?? null;
-  }
-  return (await delay(demoStore().drones.get(id) ?? null)) as Drone | null;
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { data } = await sb.from("drones").select("*").eq("id", id).single();
+  return (data as Drone | null) ?? null;
 }
 
 export async function updateDrone(id: string, patch: Partial<Drone>, _orgId: string): Promise<Drone | null> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseAdminClient } = await import("./supabase/server");
-    const sb = await getSupabaseAdminClient();
-    const { data, error } = await sb.from("drones").update({
-      ...patch,
-      last_seen_at: new Date().toISOString(),
-    }).eq("id", id).select().single();
-    if (error) throw new Error(error.message);
-    return (data as Drone) ?? null;
-  }
-  const store = demoStore();
-  const existing = store.drones.get(id);
-  if (!existing) return null;
-  const updated = { ...existing, ...patch, last_seen_at: new Date().toISOString() };
-  store.drones.set(id, updated);
-  await delay(null);
+  const { getSupabaseAdminClient } = await import("./supabase/server");
+  const sb = await getSupabaseAdminClient();
+  const { data, error } = await sb.from("drones").update({
+    ...patch,
+    last_seen_at: new Date().toISOString(),
+  }).eq("id", id).select().single();
+  if (error) throw new Error(error.message);
   cacheInvalidateOrg(_orgId);
-  return updated;
+  return (data as Drone) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,15 +173,11 @@ export async function listMissions(orgId: string): Promise<Mission[]> {
 }
 
 async function listMissionsUncached(orgId: string): Promise<Mission[]> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const { data, error } = await sb.from("missions").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return ((data ?? []) as MissionRow[]).map(missionFromRow);
-  }
-  const store = demoStore();
-  return await delay([...store.missions.values()].sort((a, b) => (b.created_at > a.created_at ? 1 : -1)));
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { data, error } = await sb.from("missions").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as MissionRow[]).map(missionFromRow);
 }
 
 /**
@@ -220,71 +190,30 @@ export async function listMissionSummaries(orgId: string): Promise<MissionSummar
   const key = `${orgId}:mission-summaries`;
   const cached = cacheGet<MissionSummary[]>(key);
   if (cached) return cached;
-  if (isSupabaseConfigured()) {
-    try {
-      const { getSupabaseServerClient } = await import("./supabase/server");
-      const sb = await getSupabaseServerClient();
-      const { data, error } = await sb.from("mission_summaries").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
-      if (error) throw new Error(error.message);
-      const result = ((data ?? []) as MissionSummary[]).map((s) => ({
-        ...s,
-        waypoint_count: s.waypoint_count ?? 0,
-      }));
-      cacheSet(key, result);
-      return result;
-    } catch (error) {
-      const stale = cacheGet<MissionSummary[]>(key, true);
-      if (stale) return stale;
-      throw error;
-    }
+  try {
+    const { getSupabaseServerClient } = await import("./supabase/server");
+    const sb = await getSupabaseServerClient();
+    const { data, error } = await sb.from("mission_summaries").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    const result = ((data ?? []) as MissionSummary[]).map((s) => ({
+      ...s,
+      waypoint_count: s.waypoint_count ?? 0,
+    }));
+    cacheSet(key, result);
+    return result;
+  } catch (error) {
+    const stale = cacheGet<MissionSummary[]>(key, true);
+    if (stale) return stale;
+    throw error;
   }
-  const store = demoStore();
-  const list = [...store.missions.values()].sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
-  const result = await delay(list.map(missionToSummary));
-  cacheSet(key, result);
-  return result;
-}
-
-function missionToSummary(m: Mission): MissionSummary {
-  return {
-    id: m.id,
-    org_id: m.org_id,
-    name: m.name,
-    site_name: m.site_name,
-    drone_id: m.drone_id,
-    status: m.status,
-    pattern: m.pattern,
-    altitude_m: m.altitude_m,
-    speed_mps: m.speed_mps,
-    overlap_percent: m.overlap_percent,
-    sensor_cadence_s: m.sensor_cadence_s,
-    planned_distance_km: m.planned_distance_km,
-    planned_duration_s: m.planned_duration_s,
-    area_ha: m.area_ha,
-    estimated_images: m.estimated_images,
-    start_at: m.start_at,
-    end_at: m.end_at,
-    paused_at: m.paused_at,
-    total_pause_s: m.total_pause_s,
-    aborted_waypoint_ix: m.aborted_waypoint_ix,
-    actual_distance_km: m.actual_distance_km,
-    actual_duration_s: m.actual_duration_s,
-    coverage_pct: m.coverage_pct,
-    images_captured: m.images_captured,
-    created_at: m.created_at,
-    waypoint_count: m.waypoints?.length ?? 0,
-  };
 }
 
 export async function getMission(id: string, _orgId: string): Promise<Mission | null> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const { data, error } = await sb.from("missions").select("*").eq("id", id).single();
-    if (error && error.code !== "PGRST116") throw new Error(error.message);
-    return data ? missionFromRow(data) : null;
-  }
-  return (await delay(demoStore().missions.get(id) ?? null)) as Mission | null;
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { data, error } = await sb.from("missions").select("*").eq("id", id).single();
+  if (error && error.code !== "PGRST116") throw new Error(error.message);
+  return data ? missionFromRow(data) : null;
 }
 
 export async function createMission(input: {
@@ -303,36 +232,9 @@ export async function createMission(input: {
   area_ha: number;
   estimated_images: number;
 }, orgId: string): Promise<Mission> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const row = {
-      org_id: orgId,
-      name: input.name,
-      site_name: input.site_name ?? null,
-      drone_id: input.drone_id ?? null,
-      status: "planned",
-      pattern: input.pattern,
-      area_geojson: input.area_geojson,
-      waypoints: input.waypoints,
-      altitude_m: input.altitude_m,
-      speed_mps: input.speed_mps,
-      overlap_percent: input.overlap_percent,
-      sensor_cadence_s: input.sensor_cadence_s,
-      planned_distance_km: input.planned_distance_km,
-      planned_duration_s: input.planned_duration_s,
-      area_ha: input.area_ha,
-      estimated_images: input.estimated_images,
-    };
-    const { data, error } = await sb.from("missions").insert(row).select().single();
-    if (error) throw new Error(error.message);
-    await appendEvent(data.id, orgId, "planned", "Mission planned and queued");
-    return missionFromRow(data);
-  }
-  const store = demoStore();
-  const id = crypto.randomUUID();
-  const mission: Mission = {
-    id,
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const row = {
     org_id: orgId,
     name: input.name,
     site_name: input.site_name ?? null,
@@ -349,31 +251,12 @@ export async function createMission(input: {
     planned_duration_s: input.planned_duration_s,
     area_ha: input.area_ha,
     estimated_images: input.estimated_images,
-    start_at: null,
-    end_at: null,
-    paused_at: null,
-    total_pause_s: 0,
-    aborted_waypoint_ix: null,
-    telemetry_snapshot: null,
-    actual_distance_km: null,
-    actual_duration_s: null,
-    coverage_pct: null,
-    images_captured: null,
-    created_at: new Date().toISOString(),
   };
-  store.missions.set(id, mission);
-  store.events.push({
-    id: crypto.randomUUID(),
-    org_id: orgId,
-    mission_id: id,
-    event: "planned",
-    waypoint_ix: null,
-    note: "Mission planned and queued",
-    at: new Date().toISOString(),
-  });
-  await delay(null);
+  const { data, error } = await sb.from("missions").insert(row).select().single();
+  if (error) throw new Error(error.message);
+  await appendEvent(data.id, orgId, "planned", "Mission planned and queued");
   cacheInvalidateOrg(orgId);
-  return mission;
+  return missionFromRow(data);
 }
 
 export async function saveMission(
@@ -381,34 +264,19 @@ export async function saveMission(
   patch: Partial<Mission>,
   _orgId: string,
 ): Promise<Mission | null> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseAdminClient } = await import("./supabase/server");
-    const sb = await getSupabaseAdminClient();
-    const { data, error } = await sb.from("missions").update(patch).eq("id", id).select().single();
-    if (error) throw new Error(error.message);
-    return data ? missionFromRow(data) : null;
-  }
-  const store = demoStore();
-  const existing = store.missions.get(id);
-  if (!existing) return null;
-  const updated = { ...existing, ...patch };
-  store.missions.set(id, updated);
-  await delay(null);
+  const { getSupabaseAdminClient } = await import("./supabase/server");
+  const sb = await getSupabaseAdminClient();
+  const { data, error } = await sb.from("missions").update(patch).eq("id", id).select().single();
+  if (error) throw new Error(error.message);
   cacheInvalidateOrg(_orgId);
-  return updated;
+  return data ? missionFromRow(data) : null;
 }
 
 export async function deleteMission(id: string, _orgId: string): Promise<void> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    await sb.from("missions").delete().eq("id", id);
-    return;
-  }
-  const store = demoStore();
-  store.missions.delete(id);
-  store.events = store.events.filter((e) => e.mission_id !== id);
-  await delay(null);
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { error } = await sb.from("missions").delete().eq("id", id);
+  if (error) throw new Error(error.message);
   cacheInvalidateOrg(_orgId);
 }
 
@@ -417,20 +285,12 @@ export async function deleteMission(id: string, _orgId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function listEvents(missionId: string, _orgId: string): Promise<MissionEvent[]> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const { data, error } = await sb.from("mission_events")
-      .select("*").eq("mission_id", missionId).order("at", { ascending: true });
-    if (error) throw new Error(error.message);
-    return (data as MissionEvent[] ?? []).map((e) => ({ ...e, event: e.event, at: e.at ?? new Date().toISOString() }));
-  }
-  const store = demoStore();
-  return await delay(
-    store.events
-      .filter((e) => e.mission_id === missionId)
-      .sort((a, b) => (a.at > b.at ? 1 : -1)),
-  );
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { data, error } = await sb.from("mission_events")
+    .select("*").eq("mission_id", missionId).order("at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data as MissionEvent[] ?? []).map((e) => ({ ...e, event: e.event, at: e.at ?? new Date().toISOString() }));
 }
 
 export async function appendEvent(
@@ -440,29 +300,16 @@ export async function appendEvent(
   note?: string,
   waypoint_ix?: number | null,
 ): Promise<void> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    await sb.from("mission_events").insert({
-      org_id: orgId,
-      mission_id: missionId,
-      event,
-      note: note ?? null,
-      waypoint_ix: waypoint_ix ?? null,
-    });
-    return;
-  }
-  const store = demoStore();
-  store.events.push({
-    id: crypto.randomUUID(),
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { error } = await sb.from("mission_events").insert({
     org_id: orgId,
     mission_id: missionId,
     event,
-    waypoint_ix: waypoint_ix ?? null,
     note: note ?? null,
-    at: new Date().toISOString(),
+    waypoint_ix: waypoint_ix ?? null,
   });
-  await delay(null);
+  if (error) throw new Error(error.message);
 }
 
 // ---------------------------------------------------------------------------
@@ -482,7 +329,6 @@ export async function orgStats(orgId: string, loadedMissions?: Mission[]): Promi
     ? completed.reduce((s, m) => s + (m.coverage_pct ?? 0), 0) / completed.length
     : 0;
 
-  if (!loadedMissions) await delay(60);
   return {
     totalMissions: missions.length,
     completedMissions: completed.length,
@@ -495,23 +341,31 @@ export async function orgStats(orgId: string, loadedMissions?: Mission[]): Promi
   };
 }
 
+// ---------------------------------------------------------------------------
+// Org resolution (server components + API routes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the authenticated user's organization id. Requires a valid Supabase
+ * session (guaranteed for dashboard routes by proxy.ts); throws when there is
+ * no authenticated user or no profile record, so callers never silently fall
+ * back to a shared/demo tenant.
+ */
 export async function resolveOrgId(): Promise<string> {
-  if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const { data: verifiedClaims } = await sb.auth.getClaims();
-    const userId = typeof verifiedClaims?.claims.sub === "string" ? verifiedClaims.claims.sub : null;
-    if (!userId) return ORG_ID_DEMO;
+  const { getSupabaseServerClient } = await import("./supabase/server");
+  const sb = await getSupabaseServerClient();
+  const { data: verifiedClaims } = await sb.auth.getClaims();
+  const userId = typeof verifiedClaims?.claims.sub === "string" ? verifiedClaims.claims.sub : null;
+  if (!userId) throw new Error("unauthorized");
 
-    const cached = orgIdCache.get(userId);
-    if (cached && cached.expiresAt > Date.now()) return cached.orgId;
+  const cached = orgIdCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.orgId;
 
-    const { data } = await sb.from("profiles").select("org_id").eq("id", userId).single();
-    const orgId = (data?.org_id as string) ?? ORG_ID_DEMO;
-    orgIdCache.set(userId, { orgId, expiresAt: Date.now() + ORG_ID_CACHE_TTL_MS });
-    return orgId;
-  }
-  return ORG_ID_DEMO;
+  const { data, error } = await sb.from("profiles").select("org_id").eq("id", userId).single();
+  if (error) throw new Error(error.message);
+  const orgId = data?.org_id as string;
+  if (!orgId) throw new Error("unauthorized");
+
+  orgIdCache.set(userId, { orgId, expiresAt: Date.now() + ORG_ID_CACHE_TTL_MS });
+  return orgId;
 }
-
-export { isSupabaseConfigured, ORG_ID_DEMO };

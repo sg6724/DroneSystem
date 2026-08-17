@@ -75,14 +75,13 @@ In addition to the four required pillars, the following were implemented to rais
 
 - **Deterministic, time-derived simulation engine.** Mission state is a *pure function* of `(plan, control timeline, now)` — no background simulator process, no WebSockets. Any component can recompute the exact current state at any instant, which makes the live monitor server-renderable, horizontally scalable, and perfectly replayable for audits.
 - **Pause-aware timeline math.** Pausing inserts wall-clock slack into the control timeline so elapsed flight time, battery, and coverage remain correct across pause/resume cycles; aborts freeze state at the interrupted waypoint.
-- **Demo mode with zero setup.** When Supabase keys are absent, the app runs against a seeded in-memory demo store, so the entire product is explorable offline.
 - **3D drone landing page.** An interactive React-Three-Fiber scene loads a glTF drone model (CC-BY-4.0 licensed, attribution retained) with a floating/rotation animation, plus a starfield background.
 - **Productized landing page.** Hero with real aerial survey imagery, workflow explainer, fieldwork band, and results cards with drone photographs.
 - **Info-tip education layer.** A reusable `InfoTip` popover component + a central metrics dictionary (`src/lib/metrics.ts`) puts a plain-language explanation on every planner parameter, dashboard stat, and analytics chart.
 - **Mobile-responsive dashboard.** A collapsible hamburger navigation in the topbar replaces the desktop sidebar on small screens; all grids, maps, and tables adapt to mobile viewports.
 - **Short-TTL read cache.** Dashboard reads are memoized server-side for a few seconds; every write invalidates the org's cached reads immediately — keeps heavy pages snappy under 1s polling.
 - **Concurrency-safe mission finalization.** Completion writes are deduplicated across simultaneous telemetry polls so a mission is finalized exactly once.
-- **Real-world seed data.** Sample sites and the starter fleet are pre-positioned around Indian survey locations (Bengaluru, Mumbai, Delhi, Jodhpur) for a realistic local demo.
+- **Real-world seed data.** Sample sites and the starter fleet are pre-positioned around Indian survey locations (Bengaluru, Mumbai, Delhi, Jodhpur) for a realistic local experience.
 
 ## Technical Stack
 
@@ -111,7 +110,6 @@ In addition to the four required pillars, the following were implemented to rais
 │                                                            │
 │  Repository layer (src/lib/repository.ts)                  │
 │    └─ Supabase client (anon) + admin client (service role) │
-│       └─ in-memory demo store fallback (demo mode)         │
 │                                                            │
 │  Mission service (src/lib/mission-service.ts)              │
 │    └─ orchestrates start / pause / resume / abort / finalize│
@@ -158,7 +156,6 @@ src/
   components/     UI + map + 3D components (overview, fleet, survey, monitor, drone-scene)
   lib/            supabase clients, repository, mission-service, metrics, types
   lib/simulation/ deterministic engine + pattern generators + geometry
-  lib/demo/       in-memory demo store + seed data
   proxy.ts        auth-aware request routing (edge middleware)
 public/models/    glTF drone model (CC-BY-4.0, license.txt included)
 supabase/
@@ -171,7 +168,7 @@ The codebase is deliberately layered so each concern has a single owner and a si
 
 ### Single Responsibility Principle (SRP)
 Each layer does exactly one job:
-- **`repository.ts`** — *data gateway only.* All Supabase REST calls and the demo-store fallback live here; the rest of the app never touches the transport.
+- **`repository.ts`** — *data gateway only.* All Supabase REST calls (anon for reads, service-role for writes) live here; the rest of the app never touches the transport.
 - **`mission-service.ts`** — *use-case orchestration only.* Encapsulates start / pause / resume / abort / finalize and the completion write-path, keeping route handlers thin.
 - **`simulation/engine.ts`** — *pure state computation only.* No I/O; a deterministic function of inputs.
 - **`simulation/patterns.ts`** — *route geometry only.* Flight-line generators (grid, crosshatch, perimeter) that map a polygon + config → waypoints.
@@ -185,7 +182,7 @@ The system is open for extension without modifying existing code:
 - The repository exposes a stable interface; a future backend (e.g. PostgreSQL direct, another cloud DB) can be swapped in beneath it without touching callers.
 
 ### Liskov Substitution Principle (LSP)
-- The demo store and the Supabase repository both implement the **same repository function signatures** and return the same domain types. Any page works identically in demo mode and in production — callers can't tell the difference.
+- The Supabase repository exposes the **same repository function signatures** and domain types across every caller — pages and API routes can't tell a server component fetch from a polling fetch, keeping the data contract stable.
 - `Mission` / `MissionSummary` share a consistent shape; the lightweight summary is a valid projection of the full mission wherever the heavy jsonb columns aren't needed.
 
 ### Interface Segregation Principle (ISP)
@@ -194,7 +191,7 @@ The system is open for extension without modifying existing code:
 
 ### Dependency Inversion Principle (DIP)
 - High-level modules (`mission-service`, pages) depend on **abstractions** (`repository` functions, engine types), never on Supabase or Postgres directly.
-- Concrete transport choices (Supabase REST vs. in-memory store) are resolved *inside* the low-level repository, isolated by the `isSupabaseConfigured()` check and dynamic imports.
+- Concrete transport details (Supabase REST via anon vs. service-role clients) are resolved *inside* the low-level repository and isolated by dynamic imports, so high-level modules never depend on a specific Supabase construct.
 - Route handlers depend on the mission-service interface, not on the persistence details.
 
 ### Additional best practices
@@ -224,7 +221,6 @@ For the front end, I chose Next.js App Router + server components for the data-h
 | Data fetch | Supabase REST + repository layer | Direct PostgREST keeps the app fast and lets RLS do the authorization; the repository layer keeps the rest of the app decoupled from the transport. |
 | Multi-tenant design | Org-scoped rows + RLS at DB level | Slightly more schema work than a shared-flat model, but it makes cross-tenant leakage structurally impossible rather than a convention. |
 | Auth | Supabase Auth, auto-confirm | Fast to stand up and secure by default. Email confirmation was intentionally disabled to avoid a delivery-rate-limited confirmation gate blocking signup during review. |
-| Demo vs. production | Same code path, dual store | One codebase, zero-config demo mode, real Supabase in production — slightly more code in the repository layer in exchange for a frictionless review experience. |
 | 3D landing scene | React Three Fiber + glTF | Adds bundle weight, but delivers a premium first impression. Model is CC-BY-4.0 licensed with attribution retained. |
 
 ### Strategy for safety and adaptability
@@ -245,9 +241,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-**Demo mode:** without Supabase keys, the app runs against a seeded in-memory store — every feature works immediately.
-
-**With Supabase:** copy `.env.local.example` → `.env.local`, fill in your project credentials (see [Environment Variables](#environment-variables)), run the `supabase/schema.sql` migration, then `npm run dev`.
+Copy `.env.local.example` → `.env.local`, fill in your project credentials (see [Environment Variables](#environment-variables)), run the `supabase/schema.sql` migration, then `npm run dev`.
 
 ## Database Schema
 
@@ -284,4 +278,3 @@ Setup:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Anon/publishable key (client) |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Service-role key (server/admin only — never expose) |
 | `SUPABASE_DB_URL` | optional | Direct Postgres connection string for local tooling |
-| `DEMO_DELAY_MS` | optional | Artificial latency (ms) for the demo store, for realistic async behavior |

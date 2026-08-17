@@ -10,7 +10,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const orgId = await resolveOrgId();
+  let orgId: string;
+  try {
+    orgId = await resolveOrgId();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const includeEvents = new URL(req.url).searchParams.get("events") === "1";
   try {
     const { mission, state } = await liveState(id, orgId);

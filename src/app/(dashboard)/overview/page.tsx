@@ -5,7 +5,6 @@ import {
   listDrones,
   orgStats,
   resolveOrgId,
-  isSupabaseConfigured,
 } from "@/lib/repository";
 import { Stat, Panel, StatusBadge, BatteryBar, ProgressBar, InfoTip, metric } from "@/components/ui";
 import { formatKm, timeAgo, statusColor, statusLabel } from "@/lib/utils";
@@ -126,11 +125,9 @@ export default async function OverviewPage() {
         <MissionTable missions={recent} drones={drones} />
       </Panel>
 
-      {isSupabaseConfigured() && (
-        <p className="text-center text-[11px] text-slate-600">
-          Connected to Supabase · org-scoped data · RLS enforced
-        </p>
-      )}
+      <p className="text-center text-[11px] text-slate-600">
+        Connected to Supabase · org-scoped data · RLS enforced
+      </p>
     </div>
   );
 }

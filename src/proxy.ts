@@ -9,9 +9,9 @@ export default async function proxy(request: NextRequest) {
   const url = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => p === "/" ? url === p : url.startsWith(p));
 
-  // Auth is enforced on every request. Without Supabase keys there is no way
-  // to authenticate, so protected routes redirect to login instead of opening
-  // the dashboard to anonymous visitors (see resolveOrgId for the demo store).
+  // Auth is enforced on every request. If Supabase is not configured there is
+  // no way to authenticate, so protected routes redirect to login (fail-closed)
+  // instead of ever opening the dashboard to anonymous visitors.
   const configured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   );

@@ -8,7 +8,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const orgId = await resolveOrgId();
+  let orgId: string;
+  try {
+    orgId = await resolveOrgId();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const mission = await getMission(id, orgId);
   if (!mission) {
     return NextResponse.json({ error: "Mission not found" }, { status: 404 });

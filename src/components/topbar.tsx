@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, Plus, LogOut, Database, ShieldCheck, Rocket, Menu, X } from "lucide-react";
+import { Bell, Plus, LogOut, ShieldCheck, Rocket, Menu, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -29,9 +29,6 @@ export function Topbar() {
   const router = useRouter();
   const now = useClock();
   const [menuOpen, setMenuOpen] = useState(false);
-  const configured = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
 
   const titles: Record<string, string> = {
     "/overview": "Operations Overview",
@@ -75,17 +72,10 @@ export function Topbar() {
 
       {/* system health */}
       <div className="hidden sm:flex items-center gap-2 text-[11px]">
-        {configured ? (
-          <span className="flex items-center gap-1.5 text-green-500">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="text-gray-400">RLS secured</span>
-          </span>
-        ) : (
-          <span className="flex items-center gap-1.5 text-amber-400">
-            <Database className="w-3.5 h-3.5" />
-            <span className="text-gray-400">Demo mode</span>
-          </span>
-        )}
+        <span className="flex items-center gap-1.5 text-green-500">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span className="text-gray-400">RLS secured</span>
+        </span>
         <span className="text-gray-700">|</span>
         <span className="mono text-gray-400 tabular-nums">
           {now.toLocaleDateString([], { month: "short", day: "numeric" })}{" "}
@@ -109,15 +99,13 @@ export function Topbar() {
         <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-green-500" />
       </button>
 
-      {configured && (
-        <button
-          onClick={signOut}
-          title="Sign out"
-          className="w-9 h-9 rounded-lg bg-gray-700/50 border border-gray-700 flex items-center justify-center hover:border-red-500/40 hover:text-red-400 transition-colors"
-        >
-          <LogOut className="w-4 h-4 text-gray-400" />
-        </button>
-      )}
+      <button
+        onClick={signOut}
+        title="Sign out"
+        className="w-9 h-9 rounded-lg bg-gray-700/50 border border-gray-700 flex items-center justify-center hover:border-red-500/40 hover:text-red-400 transition-colors"
+      >
+        <LogOut className="w-4 h-4 text-gray-400" />
+      </button>
 
       {/* mobile nav dropdown */}
       {menuOpen && (

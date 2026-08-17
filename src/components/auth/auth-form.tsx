@@ -13,21 +13,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const configured = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-
-  // If unconfigured (demo/offline), allow a local dev-session so the UI is explorable.
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       setError("Enter a valid email address.");
-      return;
-    }
-    if (!configured) {
-      router.replace("/overview");
       return;
     }
     setLoading(true);
@@ -61,7 +52,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   useEffect(() => {
     const { data: { subscription } = {} } =
-      getSupabaseBrowserClientSafe()?.auth.onAuthStateChange(
+      getSupabaseBrowserClient().auth.onAuthStateChange(
         (_event: string, session: { user: unknown } | null) => {
           if (session) router.refresh();
         },
@@ -72,51 +63,45 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {!configured ? (
-        <TestModeNotice />
-      ) : (
-        <>
-          {mode === "signup" && (
-            <div>
-              <label className="block text-[13px] font-medium text-slate-300 mb-1.5">
-                Organization name
-              </label>
-              <input
-                type="text"
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                placeholder="e.g. Acme Survey Corp"
-                className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block text-[13px] font-medium text-slate-300 mb-1.5">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
-              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-medium text-slate-300 mb-1.5">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              minLength={6}
-              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
-            />
-          </div>
-        </>
+      {mode === "signup" && (
+        <div>
+          <label className="block text-[13px] font-medium text-slate-300 mb-1.5">
+            Organization name
+          </label>
+          <input
+            type="text"
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+            placeholder="e.g. Acme Survey Corp"
+            className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
+          />
+        </div>
       )}
+
+      <div>
+        <label className="block text-[13px] font-medium text-slate-300 mb-1.5">Email</label>
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@company.com"
+          className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
+        />
+      </div>
+
+      <div>
+        <label className="block text-[13px] font-medium text-slate-300 mb-1.5">Password</label>
+        <input
+          type="password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+          minLength={6}
+          className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
+        />
+      </div>
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-300">
@@ -134,26 +119,4 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       </button>
     </form>
   );
-}
-
-function TestModeNotice() {
-  return (
-    <div className="rounded-xl border border-green-500/25 bg-green-500/10 p-4">
-      <div className="text-[13px] font-semibold text-green-500">Demo mode active</div>
-      <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
-        Supabase isn&apos;t configured yet, so you&apos;ll enter a seeded offline
-        sandbox. Add <span className="mono text-green-500">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
-        <span className="mono text-green-500">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> to .env.local
-        to enable org accounts and Row Level Security.
-      </p>
-    </div>
-  );
-}
-
-function getSupabaseBrowserClientSafe() {
-  try {
-    return getSupabaseBrowserClient();
-  } catch {
-    return null;
-  }
 }

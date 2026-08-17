@@ -15,7 +15,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const orgId = await resolveOrgId();
+  let orgId: string;
+  try {
+    orgId = await resolveOrgId();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = (await req.json().catch(() => ({}))) as { action?: string };
 
   try {
