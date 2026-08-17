@@ -18,9 +18,16 @@ export async function GET(
     return NextResponse.json({ mission: toLightMission(mission), state, events });
   } catch (e) {
     const message = e instanceof Error ? e.message : "live_state_error";
+    const isNotFound = message === "mission_not_found";
     return NextResponse.json(
-      { error: message === "mission_not_found" ? "Mission not found" : message },
-      { status: message === "mission_not_found" ? 404 : 500 },
+      {
+        error: isNotFound ? "Mission not found" : "Live data is temporarily unavailable",
+        detail: isNotFound ? undefined : message,
+      },
+      {
+        status: isNotFound ? 404 : 503,
+        headers: isNotFound ? undefined : { "Retry-After": "8", "Cache-Control": "no-store" },
+      },
     );
   }
 }

@@ -11,7 +11,6 @@ import {
   Route,
   Radio,
   BarChart3,
-  Rocket,
   Network,
   ScanSearch,
   Crosshair,
@@ -43,8 +42,8 @@ export function Sidebar() {
         <div className="p-4">
           <div className="flex items-center justify-between">
             <Link href="/overview" className={cn("flex items-center gap-3", !isExpanded && "justify-center w-[48px]")}>
-              <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
-                <Rocket className="w-5 h-5 text-white" />
+              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-xl shadow-lg shadow-emerald-500/20">
+                <img src="/skygrid-mark.svg" alt="SkyGrid" className="h-full w-full" />
               </div>
               <AnimatePresence>
                 {isExpanded && (
@@ -55,7 +54,7 @@ export function Sidebar() {
                     className="leading-tight"
                   >
                     <div className="font-bold tracking-wide text-[15px] text-white">SKYGRID</div>
-                    <div className="text-[10px] text-gray-400 tracking-[0.22em] uppercase">Survey Ops</div>
+                    <div className="text-[10px] text-gray-400 tracking-[0.22em] uppercase">Aerial Operations</div>
                   </motion.div>
                 )}
               </AnimatePresence>
