@@ -32,10 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-
+FlytBase - Software Engineer Assignment 2025  (1) (1) (1).md
 # vercel
 .vercel
-
+opencode.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
