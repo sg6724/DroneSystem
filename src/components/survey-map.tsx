@@ -78,6 +78,7 @@ export default function SurveyMap({
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
   const [vertices, setVertices] = useState<GeoPoint[]>([]);
+  const verticesRef = useRef<GeoPoint[]>([]);
 
   // initial viewport centered on area or a default world view
   const initialView = useMemo(() => {
@@ -146,11 +147,10 @@ export default function SurveyMap({
     (e: { lngLat: { lng: number; lat: number } }) => {
       if (!drawing || !onDrawPolygon) return;
       const { lng, lat } = e.lngLat;
-      setVertices((prev) => {
-        const next = [...prev, { lng, lat }];
-        onDrawPolygon(next);
-        return next;
-      });
+      const next = [...verticesRef.current, { lng, lat }];
+      verticesRef.current = next;
+      setVertices(next);
+      onDrawPolygon(next);
     },
     [drawing, onDrawPolygon],
   );
@@ -159,13 +159,11 @@ export default function SurveyMap({
     (e: { preventDefault: () => void }) => {
       if (!drawing || !onDrawPolygon) return;
       e.preventDefault();
-      setVertices((prev) => {
-        if (prev.length) {
-          onDrawPolygon([...prev, prev[0]]);
-          return [];
-        }
-        return prev;
-      });
+      const current = verticesRef.current;
+      if (!current.length) return;
+      onDrawPolygon([...current, current[0]]);
+      verticesRef.current = [];
+      setVertices([]);
     },
     [drawing, onDrawPolygon],
   );

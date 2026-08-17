@@ -26,20 +26,24 @@ function delay<T>(v: T, ms = DEMO_DELAY_MS): Promise<T> {
 // ---------------------------------------------------------------------------
 
 const DATA_CACHE_TTL_MS = 3_000;
-const dataCache = new Map<string, { value: unknown; expiresAt: number }>();
+const DATA_STALE_TTL_MS = 120_000;
+const dataCache = new Map<string, { value: unknown; expiresAt: number; staleAt: number }>();
 
-function cacheGet<T>(key: string): T | null {
+function cacheGet<T>(key: string, allowStale = false): T | null {
   const hit = dataCache.get(key);
   if (!hit) return null;
-  if (hit.expiresAt <= Date.now()) {
+  const now = Date.now();
+  if (hit.staleAt <= now) {
     dataCache.delete(key);
     return null;
   }
+  if (!allowStale && hit.expiresAt <= now) return null;
   return hit.value as T;
 }
 
 function cacheSet(key: string, value: unknown, ttlMs = DATA_CACHE_TTL_MS): void {
-  dataCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  const now = Date.now();
+  dataCache.set(key, { value, expiresAt: now + ttlMs, staleAt: now + DATA_STALE_TTL_MS });
 }
 
 function cacheInvalidateOrg(orgId: string): void {
@@ -87,18 +91,25 @@ type MissionRow = {
 // ---------------------------------------------------------------------------
 
 export async function listDrones(orgId: string): Promise<Drone[]> {
-  const cached = cacheGet<Drone[]>(`${orgId}:drones`);
+  const key = `${orgId}:drones`;
+  const cached = cacheGet<Drone[]>(key);
   if (cached) return cached;
-  const result = await listDronesUncached(orgId);
-  cacheSet(`${orgId}:drones`, result);
-  return result;
+  try {
+    const result = await listDronesUncached(orgId);
+    cacheSet(key, result);
+    return result;
+  } catch (error) {
+    const stale = cacheGet<Drone[]>(key, true);
+    if (stale) return stale;
+    throw error;
+  }
 }
 
-async function listDronesUncached(_orgId: string): Promise<Drone[]> {
+async function listDronesUncached(orgId: string): Promise<Drone[]> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
-    const { data, error } = await sb.from("drones").select("*").order("name");
+    const { data, error } = await sb.from("drones").select("*").eq("org_id", orgId).order("name");
     if (error) throw new Error(error.message);
     return (data as Drone[]) ?? [];
   }
@@ -173,18 +184,25 @@ const missionFromRow = (row: MissionRow): Mission => ({
 });
 
 export async function listMissions(orgId: string): Promise<Mission[]> {
-  const cached = cacheGet<Mission[]>(`${orgId}:missions`);
+  const key = `${orgId}:missions`;
+  const cached = cacheGet<Mission[]>(key);
   if (cached) return cached;
-  const result = await listMissionsUncached(orgId);
-  cacheSet(`${orgId}:missions`, result);
-  return result;
+  try {
+    const result = await listMissionsUncached(orgId);
+    cacheSet(key, result);
+    return result;
+  } catch (error) {
+    const stale = cacheGet<Mission[]>(key, true);
+    if (stale) return stale;
+    throw error;
+  }
 }
 
-async function listMissionsUncached(_orgId: string): Promise<Mission[]> {
+async function listMissionsUncached(orgId: string): Promise<Mission[]> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
-    const { data, error } = await sb.from("missions").select("*").order("created_at", { ascending: false });
+    const { data, error } = await sb.from("missions").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     return ((data ?? []) as MissionRow[]).map(missionFromRow);
   }
@@ -198,20 +216,33 @@ async function listMissionsUncached(_orgId: string): Promise<Mission[]> {
  * and exposes a precomputed `waypoint_count` so the payload stays small even
  * with many missions.
  */
-export async function listMissionSummaries(_orgId: string): Promise<MissionSummary[]> {
+export async function listMissionSummaries(orgId: string): Promise<MissionSummary[]> {
+  const key = `${orgId}:mission-summaries`;
+  const cached = cacheGet<MissionSummary[]>(key);
+  if (cached) return cached;
   if (isSupabaseConfigured()) {
-    const { getSupabaseServerClient } = await import("./supabase/server");
-    const sb = await getSupabaseServerClient();
-    const { data, error } = await sb.from("mission_summaries").select("*").order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return ((data ?? []) as MissionSummary[]).map((s) => ({
-      ...s,
-      waypoint_count: s.waypoint_count ?? 0,
-    }));
+    try {
+      const { getSupabaseServerClient } = await import("./supabase/server");
+      const sb = await getSupabaseServerClient();
+      const { data, error } = await sb.from("mission_summaries").select("*").eq("org_id", orgId).order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      const result = ((data ?? []) as MissionSummary[]).map((s) => ({
+        ...s,
+        waypoint_count: s.waypoint_count ?? 0,
+      }));
+      cacheSet(key, result);
+      return result;
+    } catch (error) {
+      const stale = cacheGet<MissionSummary[]>(key, true);
+      if (stale) return stale;
+      throw error;
+    }
   }
   const store = demoStore();
   const list = [...store.missions.values()].sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
-  return await delay(list.map(missionToSummary));
+  const result = await delay(list.map(missionToSummary));
+  cacheSet(key, result);
+  return result;
 }
 
 function missionToSummary(m: Mission): MissionSummary {
@@ -446,7 +477,7 @@ export async function orgStats(orgId: string, loadedMissions?: Mission[]): Promi
 
   const totalDistance = missions.reduce((s, m) => s + (m.actual_distance_km ?? m.planned_distance_km ?? 0), 0);
   const totalSeconds = missions.reduce((s, m) => s + (m.actual_duration_s ?? m.planned_duration_s ?? 0), 0);
-  const totalImages = missions.reduce((s, m) => s + (m.images_captured ?? m.estimated_images ?? 0), 0);
+  const totalImages = missions.reduce((s, m) => s + (m.images_captured ?? 0), 0);
   const coverage = completed.length
     ? completed.reduce((s, m) => s + (m.coverage_pct ?? 0), 0) / completed.length
     : 0;

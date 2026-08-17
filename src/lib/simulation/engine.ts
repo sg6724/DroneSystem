@@ -96,15 +96,15 @@ export function simulateMission(input: SimInput): DroneState {
   if (!startMs || status === "planned") {
     return zeroState(input, 0, dist);
   }
-  if (status === "aborted" || timeline.endAt) {
+  if (status === "completed") {
+    const last = wps[wps.length - 1];
+    return frozen(input, last, totalM, distanceTotalKm, totalDurationS, batteryStart, drainPerKm, 100, undefined, dist);
+  }
+  if (status === "aborted") {
     const wp = timeline.abortedWaypointIx ?? 0;
     const w = wps[Math.min(wp, wps.length - 1)] ?? wps[0];
     const flown = wp > 0 ? dist.cum[wp] : 0;
     return frozen(input, w, flown, distanceTotalKm, totalDurationS, batteryStart, drainPerKm, undefined, undefined, dist);
-  }
-  if (status === "completed") {
-    const last = wps[wps.length - 1];
-    return frozen(input, last, totalM, distanceTotalKm, totalDurationS, batteryStart, drainPerKm, 100, undefined, dist);
   }
 
   // ---- flying time computation (pause-aware) -------------------------------
