@@ -196,8 +196,8 @@ export default function SurveyMap({
       {home && (
         <Marker longitude={home.lng} latitude={home.lat} anchor="bottom">
           <div className="flex flex-col items-center">
-            <div className="w-2.5 h-2.5 rounded-full bg-indigo-400 border border-indigo-200/50 shadow" />
-            <span className="text-[9px] text-indigo-200/70 tracking-wide mt-0.5">{home.label ?? "HOME"}</span>
+            <div className="w-2.5 h-2.5 rounded-full bg-green-400 border border-green-200/50 shadow" />
+            <span className="text-[9px] text-green-200/70 tracking-wide mt-0.5">{home.label ?? "HOME"}</span>
           </div>
         </Marker>
       )}
@@ -205,9 +205,9 @@ export default function SurveyMap({
       {fleetMarkers?.map((d) => (
         <Marker key={d.id} longitude={d.lng} latitude={d.lat} anchor="center">
           <div className="pointer-events-none flex flex-col items-center">
-            <div className="w-3.5 h-3.5 rounded-full border-2" style={{ borderColor: d.color ?? "#818cf8", background: (d.color ?? "#818cf8") + "33" }} />
+            <div className="w-3.5 h-3.5 rounded-full border-2" style={{ borderColor: d.color ?? "#22c55e", background: (d.color ?? "#22c55e") + "33" }} />
             {d.label && (
-              <span className="mt-1 mono text-[9px] px-1.5 py-px rounded bg-black/60 text-indigo-200 tracking-wide">
+              <span className="mt-1 mono text-[9px] px-1.5 py-px rounded bg-black/60 text-green-200 tracking-wide">
                 {d.label}
               </span>
             )}
@@ -228,13 +228,13 @@ export default function SurveyMap({
           <Layer
             id="area-fill"
             type="fill"
-            paint={{ "fill-color": "#22d3ee", "fill-opacity": 0.12 }}
+            paint={{ "fill-color": "#22c55e", "fill-opacity": 0.12 }}
           />
           <Layer
             id="area-line"
             type="line"
             paint={{
-              "line-color": "#22d3ee",
+              "line-color": "#22c55e",
               "line-width": 2,
               "line-dasharray": [4, 3],
               "line-opacity": 0.9,
@@ -278,19 +278,19 @@ export default function SurveyMap({
           <Layer
             id="flown-line-soft"
             type="line"
-            paint={{ "line-color": "#22d3ee", "line-opacity": 0.28, "line-width": 6, "line-blur": 6 }}
+            paint={{ "line-color": "#22c55e", "line-opacity": 0.28, "line-width": 6, "line-blur": 6 }}
           />
           <Layer
             id="flown-line"
             type="line"
-            paint={{ "line-color": "#67e8f9", "line-width": 2.5, "line-opacity": 0.95 }}
+            paint={{ "line-color": "#4ade80", "line-width": 2.5, "line-opacity": 0.95 }}
           />
         </Source>
       )}
 
       {currentPosition && (
         <Marker longitude={currentPosition.lng} latitude={currentPosition.lat} anchor="center">
-          <DroneIcon heading={currentPosition.heading ?? 0} color={droneMarker?.color ?? "#22d3ee"} label={droneMarker?.label} />
+          <DroneIcon heading={currentPosition.heading ?? 0} color={droneMarker?.color ?? "#22c55e"} label={droneMarker?.label} />
         </Marker>
       )}
 
@@ -300,7 +300,7 @@ export default function SurveyMap({
       {drawing &&
         vertices.map((v, i) => (
           <Marker key={i} longitude={v.lng} latitude={v.lat} anchor="center">
-            <div className="w-3.5 h-3.5 rounded-full bg-cyan-300 border-2 border-white/80 opacity-80" />
+            <div className="w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-white/80 opacity-80" />
           </Marker>
         ))}
       </Map>
@@ -323,7 +323,7 @@ function DroneIcon({ heading, color, label }: { heading: number; color: string; 
       </svg>
       {label && (
         <div
-          className="mt-0.5 mono text-[9px] px-1.5 py-px rounded bg-black/60 text-cyan-200 tracking-wide"
+          className="mt-0.5 mono text-[9px] px-1.5 py-px rounded bg-black/60 text-green-200 tracking-wide"
           style={{ transform: `rotate(${-heading}deg)`, pointerEvents: "none" }}
         >
           {label}

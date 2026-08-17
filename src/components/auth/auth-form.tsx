@@ -86,7 +86,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 placeholder="e.g. Acme Survey Corp"
-                className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition"
+                className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
               />
             </div>
           )}
@@ -99,7 +99,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
-              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition"
+              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
             />
           </div>
 
@@ -112,7 +112,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               minLength={6}
-              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition"
+              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20 transition"
             />
           </div>
         </>
@@ -127,7 +127,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-ink-950 font-semibold py-2.5 text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full flex items-center justify-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
         {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create organization"}
@@ -138,12 +138,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
 function TestModeNotice() {
   return (
-    <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-4">
-      <div className="text-[13px] font-semibold text-cyan-300">Demo mode active</div>
+    <div className="rounded-xl border border-green-500/25 bg-green-500/10 p-4">
+      <div className="text-[13px] font-semibold text-green-500">Demo mode active</div>
       <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
         Supabase isn&apos;t configured yet, so you&apos;ll enter a seeded offline
-        sandbox. Add <span className="mono text-cyan-300">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
-        <span className="mono text-cyan-300">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> to .env.local
+        sandbox. Add <span className="mono text-green-500">NEXT_PUBLIC_SUPABASE_URL</span> and{" "}
+        <span className="mono text-green-500">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> to .env.local
         to enable org accounts and Row Level Security.
       </p>
     </div>

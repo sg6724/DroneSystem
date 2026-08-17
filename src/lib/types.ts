@@ -40,6 +40,7 @@ export interface Mission {
   pattern: SurveyPattern;
   area_geojson: { type: "Feature"; properties: Record<string, unknown>; geometry: { type: "Polygon"; coordinates: number[][][] } } | null;
   waypoints: Waypoint[];
+  waypoint_count?: number;
   altitude_m: number;
   speed_mps: number;
   overlap_percent: number;
@@ -69,6 +70,39 @@ export interface MissionEvent {
   waypoint_ix: number | null;
   note: string | null;
   at: string;
+}
+
+/**
+ * Lightweight mission projection used by high-frequency list polls. Omits the
+ * heavy jsonb columns (waypoints, area_geojson, telemetry_snapshot).
+ */
+export interface MissionSummary {
+  id: string;
+  org_id: string;
+  name: string;
+  site_name: string | null;
+  drone_id: string | null;
+  status: MissionStatus;
+  pattern: SurveyPattern;
+  altitude_m: number;
+  speed_mps: number;
+  overlap_percent: number;
+  sensor_cadence_s: number;
+  planned_distance_km: number | null;
+  planned_duration_s: number | null;
+  area_ha: number | null;
+  estimated_images: number | null;
+  start_at: string | null;
+  end_at: string | null;
+  paused_at: string | null;
+  total_pause_s: number;
+  aborted_waypoint_ix: number | null;
+  actual_distance_km: number | null;
+  actual_duration_s: number | null;
+  coverage_pct: number | null;
+  images_captured: number | null;
+  created_at: string;
+  waypoint_count: number;
 }
 
 export interface OrgStats {

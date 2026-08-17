@@ -164,9 +164,9 @@ begin
   -- seed a small starter fleet around the Bay Area so new orgs can demo immediately
   insert into drones (org_id, name, model, status, battery, max_range_km, max_speed_mps,
                       max_altitude_m, home_lat, home_lng, last_lat, last_lng) values
-    (v_org_id, 'SkyHawk-01', 'DJI Matrice 350 RTK', 'available',   98, 12, 14, 120, 37.7749, -122.4194, 37.7749, -122.4194),
-    (v_org_id, 'Condor-07',  'DJI Mavic 3 Enterprise', 'available', 87, 9,  16, 120, 37.7833, -122.4167, 37.7833, -122.4167),
-    (v_org_id, 'Vulture-4',  'DJI Matrice 300 RTK',  'charging',    62, 15, 13, 120, 40.7128, -74.0060,  40.7128, -74.0060);
+    (v_org_id, 'SkyHawk-01', 'DJI Matrice 350 RTK', 'available',   98, 12, 14, 120, 12.9716, 77.5946, 12.9716, 77.5946),
+    (v_org_id, 'Condor-07',  'DJI Mavic 3 Enterprise', 'available', 87, 9,  16, 120, 19.0760, 72.8777, 19.0760, 72.8777),
+    (v_org_id, 'Vulture-4',  'DJI Matrice 300 RTK',  'charging',    62, 15, 13, 120, 28.6139, 77.2090, 28.6139, 77.2090);
 
   return new;
 end;
@@ -189,12 +189,12 @@ on conflict do nothing;
 
 insert into drones (org_id, name, model, status, battery, max_range_km, max_speed_mps,
                     max_altitude_m, home_lat, home_lng, last_lat, last_lng) values
-  ('00000000-0000-0000-0000-000000000001', 'SkyHawk-01',  'DJI Matrice 350 RTK', 'available',   98, 12, 14, 120, 37.7749, -122.4194, 37.7749, -122.4194),
-  ('00000000-0000-0000-0000-000000000001', 'SkyHawk-02',  'DJI Matrice 350 RTK', 'charging',    62, 12, 14, 120, 37.7749, -122.4194, 37.7749, -122.4194),
-  ('00000000-0000-0000-0000-000000000001', 'Condor-07',   'DJI Mavic 3 Enterprise', 'available', 87, 9,  16, 120, 37.7833, -122.4167, 37.7833, -122.4167),
-  ('00000000-0000-0000-0000-000000000001', 'Falcon-C2',   'Autel EVO II Pro',     'maintenance', 40, 8,  15, 120, 37.7870, -122.4070, 37.7870, -122.4070),
-  ('00000000-0000-0000-0000-000000000001', 'Vulture-4',   'DJI Matrice 300 RTK',  'available',   93, 15, 13, 120, 40.7128, -74.0060,  40.7128, -74.0060),
-  ('00000000-0000-0000-0000-000000000001', 'Kestrel-9',   'DJI Mavic 3 Enterprise','charging',  71, 9,  16, 120, 51.5074, -0.1278,  51.5074, -0.1278)
+  ('00000000-0000-0000-0000-000000000001', 'SkyHawk-01',  'DJI Matrice 350 RTK', 'available',   98, 12, 14, 120, 12.9716, 77.5946, 12.9716, 77.5946),
+  ('00000000-0000-0000-0000-000000000001', 'SkyHawk-02',  'DJI Matrice 350 RTK', 'charging',    62, 12, 14, 120, 13.0827, 80.2707, 13.0827, 80.2707),
+  ('00000000-0000-0000-0000-000000000001', 'Condor-07',   'DJI Mavic 3 Enterprise', 'available', 87, 9,  16, 120, 19.0760, 72.8777, 19.0760, 72.8777),
+  ('00000000-0000-0000-0000-000000000001', 'Falcon-C2',   'Autel EVO II Pro',     'maintenance', 40, 8,  15, 120, 17.3850, 78.4867, 17.3850, 78.4867),
+  ('00000000-0000-0000-0000-000000000001', 'Vulture-4',   'DJI Matrice 300 RTK',  'available',   93, 15, 13, 120, 28.6139, 77.2090, 28.6139, 77.2090),
+  ('00000000-0000-0000-0000-000000000001', 'Kestrel-9',   'DJI Mavic 3 Enterprise','charging',  71, 9,  16, 120, 18.5204, 73.8567, 18.5204, 73.8567)
 on conflict do nothing;
 
 -- ============================================================================

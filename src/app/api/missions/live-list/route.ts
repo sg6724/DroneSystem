@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { resolveOrgId, listMissions } from "@/lib/repository";
+import { resolveOrgId, listMissionSummaries } from "@/lib/repository";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const orgId = await resolveOrgId();
-  const missions = await listMissions(orgId);
+  const missions = await listMissionSummaries(orgId);
   return NextResponse.json({ missions });
 }

@@ -52,12 +52,12 @@ function DroneCard({ drone }: { drone: Drone }) {
     drone.status === "charging" ? <BatteryCharging className="w-3.5 h-3.5 text-amber-400" /> :
     drone.status === "maintenance" ? <Wrench className="w-3.5 h-3.5 text-red-400" /> :
     drone.status === "offline" ? <ZapOff className="w-3.5 h-3.5 text-red-400" /> :
-    <MapPin className="w-3.5 h-3.5 text-cyan-400" />;
+    <MapPin className="w-3.5 h-3.5 text-green-500" />;
 
   return (
-    <div className="panel p-4 flex items-center gap-4 hover:border-cyan-500/20 transition-colors">
-      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500/15 to-indigo-500/15 border border-gridline/60 flex items-center justify-center shrink-0">
-        <Radio className="w-5 h-5 text-cyan-300" />
+    <div className="panel p-4 flex items-center gap-4 hover:border-green-500/20 transition-colors">
+      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-green-500/15 to-emerald-500/15 border border-gridline/60 flex items-center justify-center shrink-0">
+        <Radio className="w-5 h-5 text-green-500" />
       </div>
 
       <div className="flex-1 min-w-0">

@@ -9,7 +9,7 @@
 
 import {
   Waypoint,
-  pointAtDistance,
+  pointAtDistanceWithCum,
   cumulativeDistances,
   slerp,
   haversine,
@@ -85,7 +85,8 @@ export function simulateMission(input: SimInput): DroneState {
   const drainPerKm = input.batteryDrainPerKm ?? 1.8;
 
   const wps = plan.waypoints;
-  const totalM = pathDistance(wps);
+  const dist = cumulativeDistances(wps);
+  const totalM = dist.total;
   const totalDurationS = totalM / plan.speedMps;
   const distanceTotalKm = totalM / 1000;
 
@@ -93,17 +94,17 @@ export function simulateMission(input: SimInput): DroneState {
 
   // ---- defensive early returns ---------------------------------------------
   if (!startMs || status === "planned") {
-    return zeroState(input, 0);
+    return zeroState(input, 0, dist);
   }
   if (status === "aborted" || timeline.endAt) {
     const wp = timeline.abortedWaypointIx ?? 0;
     const w = wps[Math.min(wp, wps.length - 1)] ?? wps[0];
-    const flown = wp > 0 ? cumulativeDistances(wps).cum[wp] : 0;
-    return frozen(input, w, flown, distanceTotalKm, totalDurationS, batteryStart, drainPerKm);
+    const flown = wp > 0 ? dist.cum[wp] : 0;
+    return frozen(input, w, flown, distanceTotalKm, totalDurationS, batteryStart, drainPerKm, undefined, undefined, dist);
   }
   if (status === "completed") {
     const last = wps[wps.length - 1];
-    return frozen(input, last, totalM, distanceTotalKm, totalDurationS, batteryStart, drainPerKm, 100);
+    return frozen(input, last, totalM, distanceTotalKm, totalDurationS, batteryStart, drainPerKm, 100, undefined, dist);
   }
 
   // ---- flying time computation (pause-aware) -------------------------------
@@ -135,13 +136,14 @@ export function simulateMission(input: SimInput): DroneState {
       drainPerKm,
       100,
       totalDurationS,
+      dist,
     );
   }
 
   // ---- interpolate position + leg math --------------------------------------
   const flownM = Math.max(0, effActive) * plan.speedMps;
-  const pos = pointAtDistance(wps, flownM);
-  const { cum } = cumulativeDistances(wps);
+  const pos = pointAtDistanceWithCum(wps, flownM, dist);
+  const { cum } = dist;
 
   let waypointIx = 0;
   for (let i = 1; i < wps.length; i++) if (flownM >= cum[i - 1]) waypointIx = i - 1;
@@ -195,10 +197,10 @@ export function simulateMission(input: SimInput): DroneState {
 }
 
 /** State when nothing is flying yet. */
-function zeroState(input: SimInput, ix: number): DroneState {
+function zeroState(input: SimInput, ix: number, dist?: { cum: number[]; total: number }): DroneState {
   const plan = input.plan;
   const first = plan.waypoints[ix] ?? plan.waypoints[0];
-  const totalM = pathDistance(plan.waypoints);
+  const totalM = dist ? dist.total : cumulativeDistances(plan.waypoints).total;
   return {
     position: first ? { lat: first.lat, lng: first.lng, alt: 0 } : { lat: 0, lng: 0, alt: 0 },
     headingDeg: 0,
@@ -227,10 +229,13 @@ function frozen(
   totalDurationS: number,
   batteryStart: number,
   drainPerKm: number,
-  progress = flownM > 0 ? Math.min(100, (flownM / pathDistance(input.plan.waypoints)) * 100) : 0,
+  progress?: number,
   durationS = totalDurationS,
+  dist?: { cum: number[]; total: number },
 ): DroneState {
-  const complete = progress >= 100;
+  const totalM = dist ? dist.total : cumulativeDistances(input.plan.waypoints).total;
+  const finalProgress = progress ?? (flownM > 0 ? Math.min(100, (flownM / totalM) * 100) : 0);
+  const complete = finalProgress >= 100;
   const wps = input.plan.waypoints;
   const last = wps[wps.length - 1];
   const finalPos = complete ? last : pos;
@@ -238,7 +243,7 @@ function frozen(
   return {
     position: { lat: pos.lat, lng: pos.lng, alt: pos.alt },
     headingDeg: bearingDeg(wps[0], last),
-    progressPct: progress,
+    progressPct: finalProgress,
     distanceFlownKm: flownM / 1000,
     distanceTotalKm: totalKm,
     elapsedS: durationS,
@@ -248,15 +253,15 @@ function frozen(
     waypointIx: input.plan.waypoints.length - 1,
     nextWaypointIx: input.plan.waypoints.length - 1,
     speedMps: input.plan.speedMps,
-    imagesCaptured: complete ? maxImages(input) : Math.floor(durationS / input.plan.sensorCadenceS),
-    coveragePct: progress,
+    imagesCaptured: complete ? maxImages(input, totalM) : Math.floor(durationS / input.plan.sensorCadenceS),
+    coveragePct: finalProgress,
     timeline: { activeS: durationS, wallS: durationS, paused: false },
   };
 }
 
-function maxImages(input: SimInput): number {
-  const totalM = pathDistance(input.plan.waypoints);
-  return Math.floor((totalM / input.plan.speedMps) / input.plan.sensorCadenceS);
+function maxImages(input: SimInput, totalM?: number): number {
+  const total = totalM ?? pathDistance(input.plan.waypoints);
+  return Math.floor((total / input.plan.speedMps) / input.plan.sensorCadenceS);
 }
 
 /** Great-circle initial bearing (degrees, 0=north). */

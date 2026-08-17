@@ -9,11 +9,21 @@ export default async function proxy(request: NextRequest) {
   const url = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => p === "/" ? url === p : url.startsWith(p));
 
-  // In demo mode (no Supabase configured) everything is accessible.
+  // Auth is enforced on every request. Without Supabase keys there is no way
+  // to authenticate, so protected routes redirect to login instead of opening
+  // the dashboard to anonymous visitors (see resolveOrgId for the demo store).
   const configured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   );
-  if (!configured) return response;
+  if (!configured) {
+    if (!isPublic) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/login";
+      redirectUrl.searchParams.set("redirectedFrom", url);
+      return NextResponse.redirect(redirectUrl);
+    }
+    return response;
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,5 +74,5 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/((?!_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|gltf|glb|bin|json|wasm|mp3|mp4|webm|ttf|woff2?|ico)$).*)"],
 };

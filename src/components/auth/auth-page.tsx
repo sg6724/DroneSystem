@@ -11,11 +11,11 @@ export default function AuthPage({ mode }: { mode: "login" | "signup" }) {
           className="absolute inset-0 opacity-40"
           style={{
             background:
-              "radial-gradient(600px 300px at 20% 10%, rgba(34,211,238,0.14), transparent 60%), radial-gradient(500px 300px at 90% 90%, rgba(129,140,248,0.12), transparent 60%)",
+              "radial-gradient(600px 300px at 20% 10%, rgba(34,197,94,0.14), transparent 60%), radial-gradient(500px 300px at 90% 90%, rgba(74,222,128,0.12), transparent 60%)",
           }}
         />
         <div className="relative flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/25">
             <Rocket className="w-5.5 h-5.5 text-white" />
           </div>
           <div className="leading-tight">
@@ -43,7 +43,7 @@ export default function AuthPage({ mode }: { mode: "login" | "signup" }) {
             ].map((f) => (
               <div key={f.title} className="flex items-center gap-4">
                 <div className="w-11 h-11 rounded-xl bg-white/5 border border-gridline/60 flex items-center justify-center">
-                  <f.icon className="w-5 h-5 text-cyan-300" />
+                  <f.icon className="w-5 h-5 text-green-500" />
                 </div>
                 <div>
                   <div className="text-sm font-semibold">{f.title}</div>
@@ -54,11 +54,6 @@ export default function AuthPage({ mode }: { mode: "login" | "signup" }) {
           </div>
         </div>
 
-        <div className="relative text-[11px] text-slate-600 flex gap-6">
-          <span>Deterministic flight sim</span>
-          <span>Org-isolated via RLS</span>
-          <span>Serverless on Vercel</span>
-        </div>
       </div>
 
       {/* right auth panel */}
@@ -81,21 +76,21 @@ export default function AuthPage({ mode }: { mode: "login" | "signup" }) {
             {mode === "login" ? (
               <>
                 New to SkyGrid?{" "}
-                <Link href="/signup" className="text-cyan-400 hover:text-cyan-300 font-semibold">
+                <Link href="/signup" className="text-green-500 hover:text-green-400 font-semibold">
                   Create an account
                 </Link>
               </>
             ) : (
               <>
                 Already have an account?{" "}
-                <Link href="/login" className="text-cyan-400 hover:text-cyan-300 font-semibold">
+                <Link href="/login" className="text-green-500 hover:text-green-400 font-semibold">
                   Sign in
                 </Link>
               </>
             )}
           </p>
 
-          <div className="mt-10 pt-6 border-t border-gridline/50 text-center lg:hidden">
+          <div className="hidden mt-10 pt-6 border-t border-gridline/50 text-center lg:hidden">
             <p className="text-xs text-slate-600">
               Deterministic flight sim · Org-isolated data · Serverless on Vercel
             </p>

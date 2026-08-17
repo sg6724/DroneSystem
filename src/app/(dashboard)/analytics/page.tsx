@@ -2,10 +2,10 @@ import {
   BarChart3, Plane, Images, Clock3, Route,
 } from "lucide-react";
 import { resolveOrgId, listMissions, orgStats, listDrones } from "@/lib/repository";
-import { Stat, Panel, StatusBadge, ProgressBar } from "@/components/ui";
+import { Stat, Panel, StatusBadge, ProgressBar, InfoTip, metric } from "@/components/ui";
 import { formatDuration, formatKm } from "@/lib/utils";
 import { Mission } from "@/lib/types";
-import { MissionCharts } from "./charts";
+import { MissionCharts, MissionStatusDonut, CoverageBars } from "./charts";
 
 export const dynamic = "force-dynamic";
 
@@ -28,24 +28,59 @@ export default async function AnalyticsPage() {
       {/* headline stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Total Surveys" value={stats.totalMissions} icon={<BarChart3 className="w-4 h-4" />} tone="cyan"
-          sub={`${stats.completedMissions} completed · ${stats.abortedMissions} aborted`} />
+          sub={`${stats.completedMissions} completed · ${stats.abortedMissions} aborted`}
+          info={<InfoTip title={metric.an_total.title}>{metric.an_total.body}</InfoTip>} />
         <Stat label="Flight Hours" value={stats.totalFlightHours.toFixed(1)} icon={<Clock3 className="w-4 h-4" />} tone="emerald"
-          sub="Accumulated across fleet" />
+          sub="Accumulated across fleet"
+          info={<InfoTip title={metric.an_flight_hours.title}>{metric.an_flight_hours.body}</InfoTip>} />
         <Stat label="Distance Flown" value={stats.totalDistanceKm.toFixed(1) + " km"} icon={<Route className="w-4 h-4" />} tone="indigo"
-          sub="Surveyed swath paths" />
+          sub="Surveyed swath paths"
+          info={<InfoTip title={metric.an_distance.title}>{metric.an_distance.body}</InfoTip>} />
         <Stat label="Frames Captured" value={stats.totalImages.toLocaleString()} icon={<Images className="w-4 h-4" />} tone="amber"
-          sub={`Avg coverage ${stats.avgCoveragePct}%`} />
+          sub={`Avg coverage ${stats.avgCoveragePct}%`}
+          info={<InfoTip title={metric.an_frames.title}>{metric.an_frames.body}</InfoTip>} />
       </div>
 
       {/* charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Panel title="Survey Throughput" pad={false}>
+        <Panel
+          title="Survey Throughput"
+          pad={false}
+          right={<InfoTip title={metric.ch_throughput.title}>{metric.ch_throughput.body}</InfoTip>}
+        >
           <div className="h-[280px] px-2">
             <MissionCharts missions={missions} />
           </div>
         </Panel>
 
-        <Panel title="Fleet Utilization" pad={false}>
+        <Panel
+          title="Mission Status Mix"
+          pad={false}
+          right={<InfoTip title={metric.ch_status.title}>{metric.ch_status.body}</InfoTip>}
+        >
+          <div className="h-[280px] px-2">
+            <MissionStatusDonut missions={missions} />
+          </div>
+        </Panel>
+      </div>
+
+      {/* coverage + patterns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Panel
+          title="Coverage per Mission"
+          pad={false}
+          right={<InfoTip title={metric.ch_coverage.title}>{metric.ch_coverage.body}</InfoTip>}
+        >
+          <div className="h-[280px] px-2">
+            <CoverageBars missions={missions} />
+          </div>
+        </Panel>
+
+        <Panel
+          title="Fleet Utilization"
+          pad={false}
+          right={<InfoTip title={metric.ch_patterns.title}>{metric.ch_patterns.body}</InfoTip>}
+        >
           <div className="h-[280px] px-2">
             <Utilization bars={patternCounts(missions)} />
           </div>
@@ -54,17 +89,23 @@ export default async function AnalyticsPage() {
 
       {/* pattern breakdown */}
       <div className="grid grid-cols-3 gap-4">
-        <PatternStat label="Grid" count={patternBreakdown.grid} total={missions.length} tone="bg-indigo-400" />
-        <PatternStat label="Crosshatch" count={patternBreakdown.crosshatch} total={missions.length} tone="bg-cyan-400" />
-        <PatternStat label="Perimeter" count={patternBreakdown.perimeter} total={missions.length} tone="bg-emerald-400" />
+        <PatternStat label="Grid" count={patternBreakdown.grid} total={missions.length} tone="bg-green-500" />
+        <PatternStat label="Crosshatch" count={patternBreakdown.crosshatch} total={missions.length} tone="bg-green-600" />
+        <PatternStat label="Perimeter" count={patternBreakdown.perimeter} total={missions.length} tone="bg-green-400" />
       </div>
 
       {/* mission detail table */}
       <Panel
         title="Survey Report Log"
         right={
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <Plane className="w-3.5 h-3.5" /> {drones.length} aircraft registered
+          <div className="flex items-center gap-2">
+            <InfoTip title="Survey Report Log">
+              One row per mission. Distance, duration, frames and coverage are the actual values recorded when the
+              mission completed (or aborted); missions still in progress show their plan estimate instead.
+            </InfoTip>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <Plane className="w-3.5 h-3.5" /> {drones.length} aircraft registered
+            </div>
           </div>
         }
       >
@@ -100,9 +141,9 @@ function patternCounts(missions: Mission[]) {
 function Utilization({ bars }: { bars: { label: string; count: number }[] }) {
   const max = Math.max(1, ...bars.map((b) => b.count));
   const colors: Record<string, string> = {
-    grid: "bg-indigo-400",
-    crosshatch: "bg-cyan-400",
-    perimeter: "bg-emerald-400",
+    grid: "bg-green-500",
+    crosshatch: "bg-green-600",
+    perimeter: "bg-green-400",
   };
   return (
     <div className="h-full flex items-end justify-around px-4 pb-2">
@@ -111,7 +152,7 @@ function Utilization({ bars }: { bars: { label: string; count: number }[] }) {
           <span className="mono text-[12px] text-slate-300">{b.count}</span>
           <div className="w-12 rounded-t-lg bg-ink-700/40 relative overflow-hidden" style={{ height: 200 }}>
             <div
-              className={`absolute bottom-0 left-0 right-0 rounded-t-lg ${colors[b.label] ?? "bg-cyan-400"} transition-all duration-700`}
+              className={`absolute bottom-0 left-0 right-0 rounded-t-lg ${colors[b.label] ?? "bg-green-500"} transition-all duration-700`}
               style={{ height: `${(b.count / max) * 100}%`, opacity: 0.75 }}
             />
           </div>

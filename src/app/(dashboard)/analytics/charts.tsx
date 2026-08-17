@@ -2,6 +2,7 @@
 
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
+  PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
 import { Mission } from "@/lib/types";
 
@@ -39,33 +40,157 @@ export function MissionCharts({ missions }: { missions: Mission[] }) {
       <AreaChart data={data} margin={{ top: 16, right: 12, bottom: 0, left: -14 }}>
         <defs>
           <linearGradient id="gMissions" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.45} />
-            <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.02} />
+            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.45} />
+            <stop offset="100%" stopColor="#22c55e" stopOpacity={0.02} />
           </linearGradient>
           <linearGradient id="gKm" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#818cf8" stopOpacity={0.4} />
-            <stop offset="100%" stopColor="#818cf8" stopOpacity={0.02} />
+            <stop offset="0%" stopColor="#4ade80" stopOpacity={0.4} />
+            <stop offset="100%" stopColor="#4ade80" stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#16263a" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
         <XAxis
           dataKey="date"
           tickFormatter={(d) => d.slice(5)}
-          tick={{ fill: "#5a7394", fontSize: 11 }}
-          axisLine={{ stroke: "#1c2a3a" }}
+          tick={{ fill: "#6b7280", fontSize: 11 }}
+          axisLine={{ stroke: "#374151" }}
           tickLine={false}
         />
-        <YAxis tick={{ fill: "#5a7394", fontSize: 11 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip
           contentStyle={{
-            background: "#0d1520", border: "1px solid #1c2a3a", borderRadius: 10, fontSize: 12,
+            background: "#111827", border: "1px solid #374151", borderRadius: 10, fontSize: 12,
           }}
-          labelStyle={{ color: "#8fb0d8" }}
-          itemStyle={{ color: "#e6f1ff" }}
+          labelStyle={{ color: "#9ca3af" }}
+          itemStyle={{ color: "#e5e7eb" }}
         />
-        <Area type="monotone" dataKey="missions" name="Missions" stroke="#22d3ee" strokeWidth={2} fill="url(#gMissions)" />
-        <Area type="monotone" dataKey="km" name="Distance (km)" stroke="#818cf8" strokeWidth={2} fill="url(#gKm)" />
+        <Area type="monotone" dataKey="missions" name="Missions" stroke="#22c55e" strokeWidth={2} fill="url(#gMissions)" />
+        <Area type="monotone" dataKey="km" name="Distance (km)" stroke="#4ade80" strokeWidth={2} fill="url(#gKm)" />
       </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  planned: { label: "Planned", color: "#6b7280" },
+  starting: { label: "Launching", color: "#4ade80" },
+  in_progress: { label: "In Progress", color: "#22c55e" },
+  paused: { label: "Paused", color: "#eab308" },
+  completed: { label: "Completed", color: "#34d399" },
+  aborted: { label: "Aborted", color: "#f87171" },
+};
+
+/** Donut showing the share of missions in each lifecycle status. */
+export function MissionStatusDonut({ missions }: { missions: Mission[] }) {
+  const counts = new Map<string, number>();
+  missions.forEach((m) => counts.set(m.status, (counts.get(m.status) ?? 0) + 1));
+  const data = [...counts.entries()]
+    .filter(([, n]) => n > 0)
+    .map(([status, count]) => ({
+      name: STATUS_META[status]?.label ?? status,
+      value: count,
+      color: STATUS_META[status]?.color ?? "#64748b",
+    }));
+
+  if (!data.length) {
+    return (
+      <div className="h-full flex items-center justify-center text-[13px] text-slate-500">
+        No missions yet — plan one to see the status mix.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full items-center gap-2">
+      <ResponsiveContainer width="60%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            innerRadius={55}
+            outerRadius={82}
+            paddingAngle={2}
+            stroke="transparent"
+          >
+            {data.map((d) => (
+              <Cell key={d.name} fill={d.color} />
+            ))}
+          </Pie>
+          <Tooltip
+            contentStyle={{
+              background: "#111827", border: "1px solid #374151", borderRadius: 10, fontSize: 12,
+            }}
+            labelStyle={{ color: "#9ca3af" }}
+            itemStyle={{ color: "#e5e7eb" }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="flex-1 space-y-1.5 pr-2">
+        {data.map((d) => (
+          <div key={d.name} className="flex items-center justify-between text-[12px]">
+            <span className="flex items-center gap-2 text-slate-300">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+              {d.name}
+            </span>
+            <span className="mono text-slate-400 tabular-nums">{d.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Bar chart of coverage % per mission — flags under-surveyed flights. */
+export function CoverageBars({ missions }: { missions: Mission[] }) {
+  const rows = missions
+    .slice(0, 10)
+    .reverse()
+    .map((m) => ({
+      name: m.name.length > 18 ? `${m.name.slice(0, 18)}…` : m.name,
+      coverage: Math.round(m.coverage_pct ?? (m.status === "completed" ? 100 : 0)),
+      aborted: m.status === "aborted",
+    }));
+
+  if (!rows.length) {
+    return (
+      <div className="h-full flex items-center justify-center text-[13px] text-slate-500">
+        No missions yet — coverage appears after flights finish.
+      </div>
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={rows} margin={{ top: 16, right: 12, bottom: 0, left: -14 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+        <XAxis
+          dataKey="name"
+          tick={{ fill: "#6b7280", fontSize: 10 }}
+          axisLine={{ stroke: "#374151" }}
+          tickLine={false}
+          interval={0}
+        />
+        <YAxis
+          domain={[0, 100]}
+          unit="%"
+          tick={{ fill: "#6b7280", fontSize: 11 }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip
+          contentStyle={{
+            background: "#111827", border: "1px solid #374151", borderRadius: 10, fontSize: 12,
+          }}
+          labelStyle={{ color: "#9ca3af" }}
+          itemStyle={{ color: "#e5e7eb" }}
+        />
+        <Bar dataKey="coverage" name="Coverage" radius={[4, 4, 0, 0]} maxBarSize={32}>
+          {rows.map((r) => (
+            <Cell key={r.name} fill={r.aborted ? "#f87171" : r.coverage >= 100 ? "#34d399" : "#22c55e"} />
+          ))}
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   );
 }

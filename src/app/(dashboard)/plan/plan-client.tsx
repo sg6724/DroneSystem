@@ -7,8 +7,10 @@ import {
   Loader2, Check, MapPin,
 } from "lucide-react";
 import SurveyMap from "@/components/survey-map";
+import { InfoTip } from "@/components/info-tip";
 import { GeoPoint } from "@/lib/simulation/geometry";
 import { SurveyPattern, buildPath } from "@/lib/simulation/patterns";
+import { metric } from "@/lib/metrics";
 import { formatKm } from "@/lib/utils";
 import { Drone } from "@/lib/types";
 
@@ -142,7 +144,7 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
           <button
             onClick={submit}
             disabled={submitting}
-            className="flex items-center gap-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-ink-950 font-semibold px-4 py-2 text-[13px] transition-colors disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 text-[13px] transition-colors disabled:opacity-60"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             {submitting ? "Planning…" : "Plan Mission"}
@@ -159,7 +161,7 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
                 onClick={() => setDrawing(!drawing)}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium border transition-colors ${
                   drawing
-                    ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                    ? "bg-green-500/15 border-green-500/40 text-green-500"
                     : "border-gridline/60 bg-ink-800 text-slate-300 hover:bg-ink-700"
                 }`}
               >
@@ -171,7 +173,7 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
                   <button
                     key={s.name}
                     onClick={() => loadSite(s)}
-                    className="rounded-full border border-gridline/60 px-2.5 py-1 hover:border-cyan-500/40 hover:text-cyan-300 transition-colors"
+                    className="rounded-full border border-gridline/60 px-2.5 py-1 hover:border-green-500/40 hover:text-green-500 transition-colors"
                   >
                     {s.name.split("·")[1]}
                   </button>
@@ -191,7 +193,7 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
           </div>
           <div className="px-4 py-2.5 border-t border-gridline/40 flex flex-wrap gap-4 text-[11px] text-slate-500">
             <span className="flex items-center gap-1.5">
-              <MapPin className="w-3 h-3 text-cyan-400" />
+              <MapPin className="w-3 h-3 text-green-500" />
               {area && area.length >= 3
                 ? `Area locked (${area.length} vertices)`
                 : drawing
@@ -210,25 +212,43 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
 
         <div className="space-y-6">
           <div className="panel p-4 space-y-4">
-            <div className="panel-header">Mission Details</div>
+            <div className="flex items-center gap-2">
+              <div className="panel-header">Mission Details</div>
+              <InfoTip
+                title="Mission Details"
+              >
+                A mission groups one survey area, one aircraft, and one flight pattern into a single executable plan. Give it a recognizable name and site so the team can identify it on the monitor and in reports.
+              </InfoTip>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="block text-[12px] text-slate-400">Mission name</label>
+              <InfoTip title="Mission Name">A short, recognizable label for the mission, e.g. “Q3 Solar Inspection”. It appears on the live monitor, in the overview table, and in the analytics report log.</InfoTip>
+            </div>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Mission name (e.g. Q3 Solar Inspection)"
-              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 transition"
+              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 transition"
             />
+            <div className="flex items-center gap-2">
+              <label className="block text-[12px] text-slate-400">Site name</label>
+              <InfoTip title={metric.site_name.title}>{metric.site_name.body}</InfoTip>
+            </div>
             <input
               value={siteName}
               onChange={(e) => setSiteName(e.target.value)}
               placeholder="Site name"
-              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 transition"
+              className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 transition"
             />
             <div>
-              <label className="block text-[12px] text-slate-400 mb-1.5">Assign aircraft</label>
+              <div className="flex items-center gap-2 mb-1.5">
+                <label className="block text-[12px] text-slate-400">Assign aircraft</label>
+                <InfoTip title={metric.drone_id.title}>{metric.drone_id.body}</InfoTip>
+              </div>
               <select
                 value={droneId}
                 onChange={(e) => setDroneId(e.target.value)}
-                className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500/50 transition"
+                className="w-full rounded-lg bg-ink-800 border border-gridline/60 px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-500/50 transition"
               >
                 <option value="">Auto-assign at launch</option>
                 {drones.map((d) => (
@@ -246,7 +266,14 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
           </div>
 
           <div className="panel p-4 space-y-2">
-            <div className="panel-header">Survey Pattern</div>
+            <div className="flex items-center gap-2">
+              <div className="panel-header">Survey Pattern</div>
+              <InfoTip
+                title="Flight Patterns"
+              >
+                The route shape the drone flies over your survey area. Each pattern trades coverage detail against flight time and battery — pick the one that matches the job and terrain.
+              </InfoTip>
+            </div>
             {(
               [
                 { id: "grid", label: "Grid", desc: "Single-direction parallel passes", icon: Grid3x3 },
@@ -254,31 +281,49 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
                 { id: "perimeter", label: "Perimeter", desc: "Boundary trace for inspection", icon: RouteIcon },
               ] as const
             ).map((p) => (
-              <button
+              <div
                 key={p.id}
-                onClick={() => setPattern(p.id)}
-                className={`w-full flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                className={`relative rounded-xl border p-3 text-left transition-colors cursor-pointer ${
                   pattern === p.id
-                    ? "border-cyan-500/40 bg-cyan-500/10"
+                    ? "border-green-500/40 bg-green-500/10"
                     : "border-gridline/60 bg-ink-800/50 hover:bg-ink-800"
                 }`}
+                onClick={() => setPattern(p.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPattern(p.id); } }}
               >
-                <p.icon className={`w-4 h-4 mt-0.5 ${pattern === p.id ? "text-cyan-300" : "text-slate-500"}`} />
-                <span>
-                  <span className="block text-[13px] font-medium">{p.label}</span>
-                  <span className="block text-[11px] text-slate-500">{p.desc}</span>
-                </span>
-              </button>
+                <InfoTip
+                  className="absolute top-2 right-2"
+                  title={metric[`pattern_${p.id}` as keyof typeof metric].title}
+                >
+                  {metric[`pattern_${p.id}` as keyof typeof metric].body}
+                </InfoTip>
+                <div className="flex items-start gap-3">
+                  <p.icon className={`w-4 h-4 mt-0.5 ${pattern === p.id ? "text-green-500" : "text-slate-500"}`} />
+                  <span>
+                    <span className="block text-[13px] font-medium">{p.label}</span>
+                    <span className="block text-[11px] text-slate-500">{p.desc}</span>
+                  </span>
+                </div>
+              </div>
             ))}
           </div>
 
           <div className="panel p-4 space-y-4">
-            <div className="panel-header">Flight Parameters</div>
-            <Slider label="Altitude" value={altitude} unit=" m" min={20} max={120} step={5} onChange={setAltitude} />
-            <Slider label="Cruise speed" value={speed} unit=" m/s" min={4} max={25} step={1} onChange={setSpeed} />
-            <Slider label="Overlap" value={overlap} unit="%" min={0} max={95} step={5} onChange={setOverlap} />
-            <Slider label="Sensor cadence" value={cadence} unit=" s" min={1} max={30} step={1} onChange={setCadence} />
-            <Slider label="Swath factor" value={swathFactor} unit="×" min={1} max={6} step={0.5} onChange={setSwathFactor} />
+            <div className="flex items-center gap-2">
+              <div className="panel-header">Flight Parameters</div>
+              <InfoTip
+                title="Flight Parameters"
+              >
+                These control how the drone flies and captures data. Higher altitude and swath cover more ground per pass; higher overlap and faster cadence capture more detail. The mission estimate on the right updates live as you adjust them.
+              </InfoTip>
+            </div>
+            <Slider label="Altitude" value={altitude} unit=" m" min={20} max={120} step={5} onChange={setAltitude} info={<InfoTip title={metric.altitude.title}>{metric.altitude.body}</InfoTip>} />
+            <Slider label="Cruise speed" value={speed} unit=" m/s" min={4} max={25} step={1} onChange={setSpeed} info={<InfoTip title={metric.speed.title}>{metric.speed.body}</InfoTip>} />
+            <Slider label="Overlap" value={overlap} unit="%" min={0} max={95} step={5} onChange={setOverlap} info={<InfoTip title={metric.overlap.title}>{metric.overlap.body}</InfoTip>} />
+            <Slider label="Sensor cadence" value={cadence} unit=" s" min={1} max={30} step={1} onChange={setCadence} info={<InfoTip title={metric.cadence.title}>{metric.cadence.body}</InfoTip>} />
+            <Slider label="Swath factor" value={swathFactor} unit="×" min={1} max={6} step={0.5} onChange={setSwathFactor} info={<InfoTip title={metric.swath.title}>{metric.swath.body}</InfoTip>} />
           </div>
 
           {error && (
@@ -291,13 +336,13 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
             <div className="panel p-4 grid grid-cols-2 gap-3 text-center">
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-slate-500">Est. Duration</div>
-                <div className="mono text-lg font-semibold text-cyan-300">
+                <div className="mono text-lg font-semibold text-green-500">
                   {Math.round((preview.totalKm * 1000) / speed / 60)}m
                 </div>
               </div>
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-slate-500">Route Length</div>
-                <div className="mono text-lg font-semibold text-cyan-300">{formatKm(preview.totalKm)}</div>
+                <div className="mono text-lg font-semibold text-green-500">{formatKm(preview.totalKm)}</div>
               </div>
             </div>
           )}
@@ -308,15 +353,18 @@ export default function PlanClient({ drones }: { drones: Drone[] }) {
 }
 
 function Slider({
-  label, value, unit, min, max, step, onChange,
+  label, value, unit, min, max, step, onChange, info,
 }: {
-  label: string; value: number; unit: string; min: number; max: number; step: number; onChange: (v: number) => void;
+  label: string; value: number; unit: string; min: number; max: number; step: number; onChange: (v: number) => void; info?: React.ReactNode;
 }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[12px] text-slate-400">{label}</label>
-        <span className="mono text-[13px] text-cyan-300 tabular-nums">{value}{unit}</span>
+        <div className="flex items-center gap-2">
+          <label className="text-[12px] text-slate-400">{label}</label>
+          {info}
+        </div>
+        <span className="mono text-[13px] text-green-500 tabular-nums">{value}{unit}</span>
       </div>
       <input
         type="range"
@@ -325,7 +373,7 @@ function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-cyan-400"
+        className="w-full accent-green-500"
       />
     </div>
   );

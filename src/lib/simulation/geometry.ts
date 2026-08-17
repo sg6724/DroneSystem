@@ -31,22 +31,47 @@ export function haversine(a: Point, b: Point): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Total geodesic distance in meters along a polyline. */
-export function pathDistance(points: Point[]): number {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) total += haversine(points[i - 1], points[i]);
-  return total;
-}
+// ---------------------------------------------------------------------------
+// Memoized polyline distance math. Cumulative distances are a pure function of
+// the points array and are recomputed on every 1 Hz telemetry poll — memoizing
+// by array identity keeps that path single-pass instead of 3-4 passes.
+// ---------------------------------------------------------------------------
+
+const cumCache = new WeakMap<Point[], { cum: number[]; total: number }>();
 
 /** Cumulated distance (m) at each vertex, plus overall length. */
 export function cumulativeDistances(points: Point[]): { cum: number[]; total: number } {
+  const hit = cumCache.get(points);
+  if (hit) return hit;
   const cum: number[] = [0];
   let total = 0;
   for (let i = 1; i < points.length; i++) {
     total += haversine(points[i - 1], points[i]);
     cum.push(total);
   }
-  return { cum, total };
+  const out = { cum, total };
+  if (points.length <= 20_000) cumCache.set(points, out);
+  return out;
+}
+
+/** Total geodesic distance in meters along a polyline. */
+export function pathDistance(points: Point[]): number {
+  return cumulativeDistances(points).total;
+}
+
+/** Locate the point at distance d (m) along a polyline, reusing a precomputed cumulative table. */
+export function pointAtDistanceWithCum(points: Point[], d: number, dist: { cum: number[]; total: number }): Point {
+  const { cum, total } = dist;
+  if (d <= 0) return points[0];
+  if (d >= total) return points[points.length - 1];
+  for (let i = 1; i < points.length; i++) {
+    if (d <= cum[i]) {
+      const segLen = cum[i] - cum[i - 1] || 1e-9;
+      const t = (d - cum[i - 1]) / segLen;
+      return slerp(points[i - 1], points[i], t);
+    }
+  }
+  return points[points.length - 1];
 }
 
 /**
@@ -84,18 +109,9 @@ function toStableCoords(p: Point): Point {
 /** Locate the point at distance d (m) along a polyline. */
 export function pointAtDistance(points: Point[], d: number): Point {
   if (d <= 0) return points[0];
-  const { cum, total } = cumulativeDistances(points);
-  if (d >= total) return points[points.length - 1];
-  const last = Math.max(1, d);
-  for (let i = 1; i < points.length; i++) {
-    if (d <= cum[i]) {
-      const segLen = cum[i] - cum[i - 1] || 1e-9;
-      const t = (d - cum[i - 1]) / segLen;
-      return slerp(points[i - 1], points[i], t);
-    }
-  }
-  void last;
-  return points[points.length - 1];
+  const dist = cumulativeDistances(points);
+  if (d >= dist.total) return points[points.length - 1];
+  return pointAtDistanceWithCum(points, d, dist);
 }
 
 /** Approximate planar area (hectares) of a polygon using cylindrical equal-area. */

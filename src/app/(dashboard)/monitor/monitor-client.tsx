@@ -10,7 +10,7 @@ import {
 import SurveyMap from "@/components/survey-map";
 import { StatusBadge, ProgressBar } from "@/components/ui";
 import { formatDuration, formatKm, timeAgo, statusLabel } from "@/lib/utils";
-import { Mission, Drone, MissionEvent } from "@/lib/types";
+import { Mission, Drone, MissionEvent, MissionSummary } from "@/lib/types";
 import type { GeoPoint } from "@/lib/simulation/geometry";
 
 interface LiveState {
@@ -54,21 +54,55 @@ export default function MonitorClient({
   const [driving, setDriving] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const eventRef = useRef<HTMLDivElement>(null);
+  const pollInFlight = useRef(false);
 
   const selected = allMissions.find((m) => m.id === selectedId) ?? null;
   const live = selected ? telemetry[selected.id] : null;
 
   // Refresh mission list periodically to reflect status changes & new missions.
   useEffect(() => {
+    let stopped = false;
+    let inFlight = false;
     const t = setInterval(async () => {
-      const res = await fetch("/api/missions/live-list", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setAllMissions(data.missions);
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const res = await fetch("/api/missions/live-list", { cache: "no-store" });
+        if (res.ok && !stopped) {
+          const data = await res.json();
+          setAllMissions((prev) => mergeSummaries(prev, data.missions));
+        }
+      } finally {
+        inFlight = false;
       }
     }, 5000);
-    return () => clearInterval(t);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
   }, []);
+
+  // When the selected mission only has a summary (no waypoints), fetch the
+  // full record once so the map can render the flight path.
+  useEffect(() => {
+    if (!selectedId) return;
+    const m = allMissions.find((x) => x.id === selectedId);
+    if (m && m.waypoint_count && !m.waypoints?.length) {
+      let cancelled = false;
+      fetch(`/api/missions/${selectedId}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.mission && !cancelled) {
+            setAllMissions((prev) => prev.map((x) => (x.id === selectedId ? { ...x, ...d.mission } : x)));
+          }
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   // Poll live telemetry for all active/in-progress (and selected) missions every second.
   const missionKeys = allMissions.map((m) => m.id).join(",");
@@ -76,42 +110,52 @@ export default function MonitorClient({
   useEffect(() => {
     let stop = false;
     const poll = async () => {
-      const targets = allMissions
-        .filter((m) => ["starting", "in_progress", "paused"].includes(m.status) || m.id === selectedId)
-        .map((m) => m.id);
-      if (!targets.length) {
-        if (!stop) {
-          setTelemetry({});
-          setEvents({});
+      if (pollInFlight.current) return; // never stack overlapping polls
+      pollInFlight.current = true;
+      try {
+        const targets = allMissions
+          .filter((m) => ["starting", "in_progress", "paused"].includes(m.status) || m.id === selectedId)
+          .map((m) => m.id);
+        if (!targets.length) {
+          if (!stop) {
+            setTelemetry({});
+            setEvents({});
+          }
+          return;
         }
-        return;
+        const results = await Promise.allSettled(
+          targets.map((id) => {
+            const url = id === selectedId ? `/api/missions/${id}/live?events=1` : `/api/missions/${id}/live`;
+            return fetch(url, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+          }),
+        );
+        if (stop) return;
+        const nextT: Record<string, LiveState> = {};
+        const nextE: Record<string, MissionEvent[]> = {};
+        results.forEach((r, i) => {
+          const id = targets[i];
+          if (r.status === "fulfilled" && r.value?.state) {
+            nextT[id] = r.value.state;
+          }
+          if (r.status === "fulfilled" && r.value?.mission) {
+            // update mission in the list (status, actuals) without clobbering
+            // geometry already held locally
+            setAllMissions((prev) => {
+              const idx = prev.findIndex((x) => x.id === id);
+              if (idx === -1) return prev;
+              const next = [...prev];
+              next[idx] = { ...next[idx], ...r.value.mission };
+              return next;
+            });
+          }
+          const em = (r.status === "fulfilled" && r.value?.events) || [];
+          if (em.length) nextE[id] = em;
+        });
+        setTelemetry((prev) => ({ ...prev, ...nextT }));
+        setEvents((prev) => ({ ...prev, ...nextE }));
+      } finally {
+        pollInFlight.current = false;
       }
-      const results = await Promise.allSettled(
-        targets.map((id) => fetch(`/api/missions/${id}/live`, { cache: "no-store" }).then((r) => r.json()).catch(() => null)),
-      );
-      if (stop) return;
-      const nextT: Record<string, LiveState> = {};
-      const nextE: Record<string, MissionEvent[]> = {};
-      results.forEach((r, i) => {
-        const id = targets[i];
-        if (r.status === "fulfilled" && r.value?.state) {
-          nextT[id] = r.value.state;
-        }
-        if (r.status === "fulfilled" && r.value?.mission) {
-          // update mission in the list (status, actuals)
-          setAllMissions((prev) => {
-            const idx = prev.findIndex((x) => x.id === id);
-            if (idx === -1) return prev;
-            const next = [...prev];
-            next[idx] = { ...next[idx], ...r.value.mission };
-            return next;
-          });
-        }
-        const em = (r.status === "fulfilled" && r.value?.events) || [];
-        if (em.length) nextE[id] = em;
-      });
-      setTelemetry((prev) => ({ ...prev, ...nextT }));
-      setEvents((prev) => ({ ...prev, ...nextE }));
     };
     poll();
     const t = setInterval(poll, 1000);
@@ -155,7 +199,7 @@ export default function MonitorClient({
 
   const positionNow: { lat: number; lng: number; heading?: number } | undefined = live
     ? { lat: live.position.lat, lng: live.position.lng, heading: live.headingDeg }
-    : selected && selected.waypoints[0]
+    : selected?.waypoints?.[0]
     ? { lat: selected.waypoints[0].lat, lng: selected.waypoints[0].lng }
     : undefined;
 
@@ -172,8 +216,8 @@ export default function MonitorClient({
       {/* header strip */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[12px] font-semibold text-cyan-300">
-            <span className="dot bg-cyan-400 live-pulse" />
+          <div className="flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 text-[12px] font-semibold text-green-500">
+            <span className="dot bg-green-400 live-pulse" />
             {activeCount} ACTIVE
           </div>
           <span className="text-sm text-slate-500">
@@ -203,7 +247,7 @@ export default function MonitorClient({
                   key={m.id}
                   onClick={() => setSelectedId(m.id)}
                   className={`w-full text-left px-4 py-3 border-b border-gridline/40 transition-colors ${
-                    active ? "bg-cyan-500/[0.07] border-l-2 border-l-cyan-400" : "hover:bg-white/[0.02]"
+                    active ? "bg-green-500/[0.07] border-l-2 border-l-green-400" : "hover:bg-white/[0.02]"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -213,7 +257,7 @@ export default function MonitorClient({
                   <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
                     <span className="flex items-center gap-1">
                       <Waypoints className="w-3 h-3" />
-                      {m.waypoints.length} wps
+                      {m.waypoints?.length ?? m.waypoint_count ?? 0} wps
                     </span>
                     <span className="mono">
                       {st ? Math.round(st.progressPct) : m.coverage_pct ?? 0}%
@@ -244,8 +288,8 @@ export default function MonitorClient({
               <div className="panel overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gridline/40">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500/20 to-indigo-500/20 border border-gridline/60 flex items-center justify-center">
-                      <Satellite className="w-4 h-4 text-cyan-300" />
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500/20 to-green-700/20 border border-gridline/60 flex items-center justify-center">
+                      <Satellite className="w-4 h-4 text-green-500" />
                     </div>
                     <div>
                       <div className="text-[14px] font-semibold leading-tight">{selected.name}</div>
@@ -254,7 +298,7 @@ export default function MonitorClient({
                   </div>
                   <div className="flex items-center gap-2.5">
                     {selected.pattern && (
-                      <span className="badge border border-indigo-400/25 bg-indigo-400/10 text-indigo-300 capitalize">
+                      <span className="badge border border-green-500/25 bg-green-500/10 text-green-500 capitalize">
                         {selected.pattern}
                       </span>
                     )}
@@ -269,17 +313,17 @@ export default function MonitorClient({
                     currentPosition={positionNow}
                     droneMarker={{
                       label: selectedId ? selected.name.slice(0, 8) : undefined,
-                      color: selected.status === "aborted" ? "#f87171" : selected.status === "paused" ? "#fbbf24" : "#22d3ee",
+                      color: selected.status === "aborted" ? "#f87171" : selected.status === "paused" ? "#eab308" : "#22c55e",
                     }}
                     fitOnDataKey={selectedId ?? undefined}
                     className="rounded-none"
                   />
                   {/* status banner */}
                   <div className="absolute top-3 left-3 z-10 panel px-3 py-2 flex items-center gap-2 text-[12px]">
-                    <span className={`dot ${selected.status === "in_progress" || selected.status === "starting" ? "bg-cyan-400 live-pulse" : selected.status === "paused" ? "bg-amber-400" : selected.status === "completed" ? "bg-emerald-400" : "bg-red-400"}`} />
+                    <span className={`dot ${selected.status === "in_progress" || selected.status === "starting" ? "bg-green-400 live-pulse" : selected.status === "paused" ? "bg-amber-400" : selected.status === "completed" ? "bg-emerald-400" : "bg-red-400"}`} />
                     <span className="font-medium capitalize">{statusLabel(selected.status)}</span>
                     <span className="text-slate-500">·</span>
-                    <span className="text-slate-400">WP {selected.waypoints.length ? (live ? live.nextWaypointIx + 1 : 1) : 0}/{selected.waypoints.length}</span>
+                    <span className="text-slate-400">WP {selected.waypoints?.length ? (live ? live.nextWaypointIx + 1 : 1) : 0}/{selected.waypoints?.length ?? selected.waypoint_count ?? 0}</span>
                   </div>
                 </div>
               </div>
@@ -294,14 +338,14 @@ export default function MonitorClient({
                       <button
                         disabled={selected.status === "aborted" || selected.status === "completed"}
                         onClick={() => action("start")}
-                        className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-ink-950 font-semibold py-3 text-[13px] col-span-2 transition-colors"
+                        className="flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white font-semibold py-3 text-[13px] col-span-2 transition-colors"
                       >
                         <Play className="w-4 h-4" /> Launch Mission
                       </button>
                     ) : selected.status === "paused" ? (
                       <button
                         onClick={() => action("resume")}
-                        className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-ink-950 font-semibold py-3 text-[13px] col-span-2 transition-colors"
+                        className="flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold py-3 text-[13px] col-span-2 transition-colors"
                       >
                         <Play className="w-4 h-4" /> Resume
                       </button>
@@ -378,6 +422,20 @@ export default function MonitorClient({
   );
 }
 
+/**
+ * Merge a light summary list (from /api/missions/live-list) into the full
+ * mission list held in state. Missing keys on summaries (e.g. waypoints) are
+ * preserved from existing full records, so geometry is never dropped.
+ */
+function mergeSummaries(prev: Mission[], summaries: MissionSummary[]): Mission[] {
+  const map = new Map(prev.map((m) => [m.id, m]));
+  for (const s of summaries) {
+    const existing = map.get(s.id);
+    map.set(s.id, existing ? { ...existing, ...s } : (s as unknown as Mission));
+  }
+  return [...map.values()].sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
+}
+
 function MetricRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex items-center justify-between text-[13px]">
@@ -392,11 +450,10 @@ function MetricRow({ icon: Icon, label, value }: { icon: LucideIcon; label: stri
 function TimelineRow({ at, label, kind, live }: { at: string; label: string; kind: string; live?: boolean }) {
   const colors: Record<string, string> = {
     planned: "bg-slate-400",
-    starting: "bg-cyan-400",
-    in_progress: "bg-cyan-400",
-    paused: "bg-amber-400",
-    resumed: "bg-cyan-400",
-    waypoint_reached: "bg-cyan-400",
+starting: "bg-green-400",
+    in_progress: "bg-green-400",
+    resumed: "bg-green-400",
+    waypoint_reached: "bg-green-400",
     completed: "bg-emerald-400",
     aborted: "bg-red-400",
   };

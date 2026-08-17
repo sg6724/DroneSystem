@@ -4,7 +4,7 @@
 // ============================================================================
 
 import "server-only";
-import { Drone, Mission, MissionEvent, OrgStats } from "./types";
+import { Drone, Mission, MissionEvent, MissionSummary, OrgStats } from "./types";
 import { ORG_ID_DEMO, demoStore } from "./demo/demo-store";
 
 const isSupabaseConfigured = () =>
@@ -13,8 +13,40 @@ const isSupabaseConfigured = () =>
 const orgIdCache = new Map<string, { orgId: string; expiresAt: number }>();
 const ORG_ID_CACHE_TTL_MS = 60_000;
 
-function delay<T>(v: T, ms = 120): Promise<T> {
-  return new Promise((r) => setTimeout(() => r(v), ms));
+// Demo-store artificial latency. Configurable so dev/demo stays snappy.
+const DEMO_DELAY_MS = Number(process.env.DEMO_DELAY_MS ?? 0);
+
+function delay<T>(v: T, ms = DEMO_DELAY_MS): Promise<T> {
+  return ms > 0 ? new Promise((r) => setTimeout(() => r(v), ms)) : Promise.resolve(v);
+}
+
+// ---------------------------------------------------------------------------
+// Short-TTL read cache (per server instance). Dashboard reads are memoized for
+// a few seconds; every write invalidates the org's cached reads immediately.
+// ---------------------------------------------------------------------------
+
+const DATA_CACHE_TTL_MS = 3_000;
+const dataCache = new Map<string, { value: unknown; expiresAt: number }>();
+
+function cacheGet<T>(key: string): T | null {
+  const hit = dataCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    dataCache.delete(key);
+    return null;
+  }
+  return hit.value as T;
+}
+
+function cacheSet(key: string, value: unknown, ttlMs = DATA_CACHE_TTL_MS): void {
+  dataCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+function cacheInvalidateOrg(orgId: string): void {
+  const prefix = `${orgId}:`;
+  for (const key of dataCache.keys()) {
+    if (key.startsWith(prefix)) dataCache.delete(key);
+  }
 }
 
 export type { Drone, Mission, MissionEvent, OrgStats };
@@ -54,7 +86,15 @@ type MissionRow = {
 // Drones
 // ---------------------------------------------------------------------------
 
-export async function listDrones(_orgId: string): Promise<Drone[]> {
+export async function listDrones(orgId: string): Promise<Drone[]> {
+  const cached = cacheGet<Drone[]>(`${orgId}:drones`);
+  if (cached) return cached;
+  const result = await listDronesUncached(orgId);
+  cacheSet(`${orgId}:drones`, result);
+  return result;
+}
+
+async function listDronesUncached(_orgId: string): Promise<Drone[]> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
@@ -93,13 +133,8 @@ export async function updateDrone(id: string, patch: Partial<Drone>, _orgId: str
   const updated = { ...existing, ...patch, last_seen_at: new Date().toISOString() };
   store.drones.set(id, updated);
   await delay(null);
+  cacheInvalidateOrg(_orgId);
   return updated;
-}
-
-export async function resetDronePosition(id: string, orgId: string): Promise<Drone | null> {
-  const drone = await getDrone(id, orgId);
-  if (!drone) return null;
-  return updateDrone(id, { last_lat: drone.home_lat, last_lng: drone.home_lng, status: "available" }, orgId);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +172,15 @@ const missionFromRow = (row: MissionRow): Mission => ({
   created_at: row.created_at ?? new Date().toISOString(),
 });
 
-export async function listMissions(_orgId: string): Promise<Mission[]> {
+export async function listMissions(orgId: string): Promise<Mission[]> {
+  const cached = cacheGet<Mission[]>(`${orgId}:missions`);
+  if (cached) return cached;
+  const result = await listMissionsUncached(orgId);
+  cacheSet(`${orgId}:missions`, result);
+  return result;
+}
+
+async function listMissionsUncached(_orgId: string): Promise<Mission[]> {
   if (isSupabaseConfigured()) {
     const { getSupabaseServerClient } = await import("./supabase/server");
     const sb = await getSupabaseServerClient();
@@ -147,6 +190,59 @@ export async function listMissions(_orgId: string): Promise<Mission[]> {
   }
   const store = demoStore();
   return await delay([...store.missions.values()].sort((a, b) => (b.created_at > a.created_at ? 1 : -1)));
+}
+
+/**
+ * Lightweight mission list for high-frequency polling (e.g. the live monitor).
+ * Omits the heavy jsonb columns (waypoints, area_geojson, telemetry_snapshot)
+ * and exposes a precomputed `waypoint_count` so the payload stays small even
+ * with many missions.
+ */
+export async function listMissionSummaries(_orgId: string): Promise<MissionSummary[]> {
+  if (isSupabaseConfigured()) {
+    const { getSupabaseServerClient } = await import("./supabase/server");
+    const sb = await getSupabaseServerClient();
+    const { data, error } = await sb.from("mission_summaries").select("*").order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as MissionSummary[]).map((s) => ({
+      ...s,
+      waypoint_count: s.waypoint_count ?? 0,
+    }));
+  }
+  const store = demoStore();
+  const list = [...store.missions.values()].sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
+  return await delay(list.map(missionToSummary));
+}
+
+function missionToSummary(m: Mission): MissionSummary {
+  return {
+    id: m.id,
+    org_id: m.org_id,
+    name: m.name,
+    site_name: m.site_name,
+    drone_id: m.drone_id,
+    status: m.status,
+    pattern: m.pattern,
+    altitude_m: m.altitude_m,
+    speed_mps: m.speed_mps,
+    overlap_percent: m.overlap_percent,
+    sensor_cadence_s: m.sensor_cadence_s,
+    planned_distance_km: m.planned_distance_km,
+    planned_duration_s: m.planned_duration_s,
+    area_ha: m.area_ha,
+    estimated_images: m.estimated_images,
+    start_at: m.start_at,
+    end_at: m.end_at,
+    paused_at: m.paused_at,
+    total_pause_s: m.total_pause_s,
+    aborted_waypoint_ix: m.aborted_waypoint_ix,
+    actual_distance_km: m.actual_distance_km,
+    actual_duration_s: m.actual_duration_s,
+    coverage_pct: m.coverage_pct,
+    images_captured: m.images_captured,
+    created_at: m.created_at,
+    waypoint_count: m.waypoints?.length ?? 0,
+  };
 }
 
 export async function getMission(id: string, _orgId: string): Promise<Mission | null> {
@@ -245,6 +341,7 @@ export async function createMission(input: {
     at: new Date().toISOString(),
   });
   await delay(null);
+  cacheInvalidateOrg(orgId);
   return mission;
 }
 
@@ -266,6 +363,7 @@ export async function saveMission(
   const updated = { ...existing, ...patch };
   store.missions.set(id, updated);
   await delay(null);
+  cacheInvalidateOrg(_orgId);
   return updated;
 }
 
@@ -280,6 +378,7 @@ export async function deleteMission(id: string, _orgId: string): Promise<void> {
   store.missions.delete(id);
   store.events = store.events.filter((e) => e.mission_id !== id);
   await delay(null);
+  cacheInvalidateOrg(_orgId);
 }
 
 // ---------------------------------------------------------------------------

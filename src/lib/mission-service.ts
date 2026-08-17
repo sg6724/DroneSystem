@@ -5,7 +5,6 @@
 // ============================================================================
 
 import "server-only";
-import { Drone } from "./types";
 import {
   simulateMission, actionStart, actionPause, actionResume, actionAbort,
   MissionPlan, ControlTimeline, DroneState,
@@ -14,8 +13,6 @@ import {
   getMission, saveMission, appendEvent, updateDrone,
   Mission as RepoMission,
 } from "./repository";
-
-const BATTERY_DRAIN_PER_KM = 1.8;
 
 function toPlan(mission: RepoMission): MissionPlan {
   return {
@@ -52,12 +49,14 @@ export async function liveState(missionId: string, orgId: string, batteryStart =
   // Telemetry is polled continuously, so it is the reliable place to persist
   // a naturally completed mission. Without this transition, a flight stays
   // "starting" or "in_progress" forever after reaching its last waypoint.
+  // We pass the already-loaded mission + state (no re-fetch, no re-simulate)
+  // and dedupe concurrent polls so only one write batch runs.
   if (
     state &&
     state.progressPct >= 100 &&
     (mission.status === "starting" || mission.status === "in_progress")
   ) {
-    const completed = await finalizeIfComplete(missionId, orgId, batteryStart);
+    const completed = await finalizeCompleteDeduped(mission, state, orgId);
     return { mission: completed ?? mission, state };
   }
 
@@ -72,18 +71,18 @@ export async function startMission(missionId: string, orgId: string): Promise<Re
 
   const next = actionStart();
 
-  const updated = await saveMission(
-    missionId,
-    { status: next.status, start_at: next.startAt, end_at: null, paused_at: null, total_pause_s: 0, aborted_waypoint_ix: null },
-    orgId,
-  );
-
-  // Mark the assigned drone in-mission.
+  const writes: Promise<unknown>[] = [
+    saveMission(
+      missionId,
+      { status: next.status, start_at: next.startAt, end_at: null, paused_at: null, total_pause_s: 0, aborted_waypoint_ix: null },
+      orgId,
+    ),
+  ];
   if (mission.drone_id) {
-    await updateDrone(mission.drone_id, { status: "in_mission" }, orgId);
+    writes.push(updateDrone(mission.drone_id, { status: "in_mission" }, orgId));
   }
-
-  await appendEvent(missionId, orgId, "starting", "Mission launching");
+  writes.push(appendEvent(missionId, orgId, "starting", "Mission launching"));
+  const [updated] = (await Promise.all(writes)) as [RepoMission | null, ...unknown[]];
   return updated!;
 }
 
@@ -94,12 +93,15 @@ export async function pauseMission(missionId: string, orgId: string): Promise<Re
 
   const timeline = toTimeline(mission);
   const next = actionPause(mission.status, timeline);
-  const updated = await saveMission(
-    missionId,
-    { status: next.status, paused_at: next.pausedAt, end_at: next.endAt },
-    orgId,
-  );
-  if (next.status === "paused") await appendEvent(missionId, orgId, "paused", "Operator paused mission");
+  const writes: Promise<unknown>[] = [
+    saveMission(
+      missionId,
+      { status: next.status, paused_at: next.pausedAt, end_at: next.endAt },
+      orgId,
+    ),
+  ];
+  if (next.status === "paused") writes.push(appendEvent(missionId, orgId, "paused", "Operator paused mission"));
+  const [updated] = (await Promise.all(writes)) as [RepoMission | null, ...unknown[]];
   return updated!;
 }
 
@@ -110,12 +112,15 @@ export async function resumeMission(missionId: string, orgId: string): Promise<R
 
   const timeline = toTimeline(mission);
   const next = actionResume(mission.status, timeline);
-  const updated = await saveMission(
-    missionId,
-    { status: next.status, paused_at: next.pausedAt, total_pause_s: next.totalPauseS },
-    orgId,
-  );
-  if (next.status === "in_progress") await appendEvent(missionId, orgId, "resumed", "Operator resumed mission");
+  const writes: Promise<unknown>[] = [
+    saveMission(
+      missionId,
+      { status: next.status, paused_at: next.pausedAt, total_pause_s: next.totalPauseS },
+      orgId,
+    ),
+  ];
+  if (next.status === "in_progress") writes.push(appendEvent(missionId, orgId, "resumed", "Operator resumed mission"));
+  const [updated] = (await Promise.all(writes)) as [RepoMission | null, ...unknown[]];
   return updated!;
 }
 
@@ -131,30 +136,78 @@ export async function abortMission(missionId: string, orgId: string): Promise<Re
     status: mission.status,
     batteryStart: 100, // overwritten by snapshot below
   });
-  const now = new Date().toISOString();
   const next = actionAbort(mission.status, timeline, state);
 
-  const updated = await saveMission(
-    missionId,
-    {
-      status: next.status,
-      end_at: next.endAt,
-      aborted_waypoint_ix: next.abortedWaypointIx,
-      telemetry_snapshot: { position: state.position, progressPct: state.progressPct, distanceFlownKm: state.distanceFlownKm },
-      actual_distance_km: state.distanceFlownKm,
-      actual_duration_s: Math.round(state.elapsedS),
-      coverage_pct: Math.round(state.coveragePct * 10) / 10,
-      images_captured: state.imagesCaptured,
-    },
-    orgId,
-  );
-
+  const writes: Promise<unknown>[] = [
+    saveMission(
+      missionId,
+      {
+        status: next.status,
+        end_at: next.endAt,
+        aborted_waypoint_ix: next.abortedWaypointIx,
+        telemetry_snapshot: { position: state.position, progressPct: state.progressPct, distanceFlownKm: state.distanceFlownKm },
+        actual_distance_km: state.distanceFlownKm,
+        actual_duration_s: Math.round(state.elapsedS),
+        coverage_pct: Math.round(state.coveragePct * 10) / 10,
+        images_captured: state.imagesCaptured,
+      },
+      orgId,
+    ),
+  ];
   if (mission.drone_id) {
-    await updateDrone(mission.drone_id, { status: "available", last_lat: state.position.lat, last_lng: state.position.lng }, orgId);
+    writes.push(updateDrone(mission.drone_id, { status: "available", last_lat: state.position.lat, last_lng: state.position.lng }, orgId));
   }
-  await appendEvent(missionId, orgId, "aborted", `Aborted at waypoint ${next.abortedWaypointIx + 1}`, next.abortedWaypointIx);
-  void now;
+  writes.push(appendEvent(missionId, orgId, "aborted", `Aborted at waypoint ${next.abortedWaypointIx + 1}`, next.abortedWaypointIx));
+  const [updated] = (await Promise.all(writes)) as [RepoMission | null, ...unknown[]];
   return updated!;
+}
+
+// ---------------------------------------------------------------------------
+// Completion write-path. Runs once per mission (deduped across concurrent 1 Hz
+// polls) and executes the persistence as parallel writes — no redundant
+// re-fetch of the mission, no separate drone read.
+// ---------------------------------------------------------------------------
+
+const finalizeInFlight = new Map<string, Promise<RepoMission | null>>();
+
+function finalizeCompleteDeduped(mission: RepoMission, state: DroneState, orgId: string): Promise<RepoMission | null> {
+  const inFlight = finalizeInFlight.get(mission.id);
+  if (inFlight) return inFlight;
+  const p = finalizeComplete(mission, state, orgId).finally(() => {
+    finalizeInFlight.delete(mission.id);
+  });
+  finalizeInFlight.set(mission.id, p);
+  return p;
+}
+
+async function finalizeComplete(mission: RepoMission, state: DroneState, orgId: string): Promise<RepoMission | null> {
+  const writes: Promise<unknown>[] = [
+    saveMission(
+      mission.id,
+      {
+        status: "completed",
+        end_at: new Date().toISOString(),
+        telemetry_snapshot: { position: state.position, progressPct: 100 },
+        actual_distance_km: state.distanceTotalKm,
+        actual_duration_s: Math.round(state.totalDurationS),
+        coverage_pct: 100,
+        images_captured: state.imagesCaptured,
+      },
+      orgId,
+    ),
+    appendEvent(mission.id, orgId, "completed", "Mission completed — survey data collected"),
+  ];
+  if (mission.drone_id) {
+    writes.push(
+      updateDrone(
+        mission.drone_id,
+        { status: "available", last_lat: state.position.lat, last_lng: state.position.lng, battery: Math.round(state.batteryPct) },
+        orgId,
+      ),
+    );
+  }
+  const [updated] = (await Promise.all(writes)) as [RepoMission | null, ...unknown[]];
+  return updated;
 }
 
 /** Evaluate => persist final stats when a mission completes without an operator. */
@@ -168,32 +221,7 @@ export async function finalizeIfComplete(missionId: string, orgId: string, batte
   const state = simulateMission({ plan, timeline, status: mission.status, batteryStart });
 
   if (state.progressPct >= 100) {
-    const updated = await saveMission(
-      missionId,
-      {
-        status: "completed",
-        end_at: new Date().toISOString(),
-        telemetry_snapshot: { position: state.position, progressPct: 100 },
-        actual_distance_km: state.distanceTotalKm,
-        actual_duration_s: Math.round(state.totalDurationS),
-        coverage_pct: 100,
-        images_captured: state.imagesCaptured,
-      },
-      orgId,
-    );
-    await appendEvent(missionId, orgId, "completed", "Mission completed — survey data collected");
-    if (mission.drone_id) {
-      const drone = await getDroneForUpdate(mission.drone_id, orgId);
-      await updateDrone(mission.drone_id, { status: "available", last_lat: state.position.lat, last_lng: state.position.lng, battery: drone ? Math.round(state.batteryPct) : 80 }, orgId);
-    }
-    return updated;
+    return finalizeCompleteDeduped(mission, state, orgId);
   }
   return mission;
 }
-
-async function getDroneForUpdate(id: string, orgId: string): Promise<Drone | null> {
-  const { getDrone } = await import("./repository");
-  return getDrone(id, orgId);
-}
-
-export { BATTERY_DRAIN_PER_KM };

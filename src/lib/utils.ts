@@ -50,10 +50,10 @@ export function statusColor(status: string): string {
     case "available":
     case "resumed":
     case "completed":
-      return "text-emerald-400";
+      return "text-green-500";
     case "in_mission":
     case "starting":
-      return "text-cyan-400";
+      return "text-green-500";
     case "paused":
     case "charging":
     case "planned":
